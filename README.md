@@ -32,8 +32,8 @@ This mod makes EMS behave more like a real system. It has dedicated depots, code
 ### On scene
 - **On-scene care time**: the crew stays with the patient for a configurable number of game minutes before the patient boards. With an NEF involved, care starts when both are there. If the NEF does not arrive within the maximum wait, the crew starts alone. Driving time doesn't count.
 - **Scene parking**: vehicles park off the road, on the sidewalk, in parking lanes or at intersection corners. A free parking spot is preferred over the sidewalk. Angled parking keeps the rear out of the lane.
-<img width="1920" height="1080" alt="08-November-14-14-15-05" src="https://github.com/user-attachments/assets/7318f415-161f-466a-aa6f-185712d178a8" />
-<img width="1920" height="1080" alt="08-November-14-12-51-04" src="https://github.com/user-attachments/assets/f6b25c4b-b44b-457a-9f09-e9a3c277086c" />
+- <img width="1920" height="1080" alt="08-November-14-14-15-05" src="https://github.com/user-attachments/assets/7318f415-161f-466a-aa6f-185712d178a8" />
+- <img width="1920" height="1080" alt="08-November-14-12-51-04" src="https://github.com/user-attachments/assets/f6b25c4b-b44b-457a-9f09-e9a3c277086c" />
 
 
 ### Emergency driving
