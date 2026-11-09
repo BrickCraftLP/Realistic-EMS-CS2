@@ -69,14 +69,6 @@ Settings live in [Setting.cs](RealisticEMS/Setting.cs). German and English are i
 - Subscribe on Paradox Mods (mod ID `166759`).
 - Requires Cities: Skylines II, game version `1.*`.
 
-## Building
+S.csproj -c Release
 
-Requires the CS2 modding toolchain (.NET Framework 4.8 target) and Node for the UI in `RealisticEMS/UI`.
-
-```
-dotnet build RealisticEMS/RealisticEMS.csproj -c Release
-```
-
-## Credits
-
-Call codes: Einsatzcodes Wien (einsatzcodes.at), Stand 06.01.2025.
+Credits Call-codes: [Einsatzcodes Wien](https://einsatzcodes.at), Stand 06.01.2025.
