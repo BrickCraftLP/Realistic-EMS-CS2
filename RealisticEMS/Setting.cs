@@ -9,14 +9,14 @@ namespace RealisticEMS
     /// <summary>Options: tabs and groups below; within a group, options appear in declaration order.</summary>
     [FileLocation(nameof(RealisticEMS))]
     [SettingsUITabOrder(Dispatch, Scene, Driving, General)]
-    [SettingsUIGroupOrder(Hospitals, Depots, Calls, Care, Doctor, Parking, WayAhead, Lanes, Corridor, LastResort, Vehicles, About)]
-    [SettingsUIShowGroupName(Hospitals, Depots, Calls, Care, Doctor, Parking, WayAhead, Lanes, Corridor, LastResort, Vehicles, About)]
+    [SettingsUIGroupOrder(Hospitals, Depots, Calls, Care, Doctor, Parking, WayAhead, Lanes, Corridor, Vehicles, About)]
+    [SettingsUIShowGroupName(Hospitals, Depots, Calls, Care, Doctor, Parking, WayAhead, Lanes, Corridor, Vehicles, About)]
     public class Setting : ModSetting
     {
         public const string Dispatch = "Dispatch", Scene = "Scene", Driving = "Driving", General = "General";
         public const string Hospitals = "Hospitals", Depots = "Depots", Calls = "Calls";
         public const string Care = "Care", Doctor = "Doctor", Parking = "Parking";
-        public const string WayAhead = "WayAhead", Lanes = "Lanes", Corridor = "Corridor", LastResort = "LastResort", Vehicles = "Vehicles";
+        public const string WayAhead = "WayAhead", Lanes = "Lanes", Corridor = "Corridor",Vehicles = "Vehicles";
         public const string About = "About";
 
         public Setting(IMod mod) : base(mod) { SetDefaults(); } // ModSetting does not call it
@@ -50,6 +50,10 @@ namespace RealisticEMS
         /// <summary>How severe calls are coded (share of Delta/Echo).</summary>
         [SettingsUISection(Dispatch, Calls)]
         public CallMix CallMix { get; set; }
+
+        /// <summary>How many sick/injured calls happen compared to vanilla (CallVolumeSystem).</summary>
+        [SettingsUISection(Dispatch, Calls)]
+        public CallVolume CallVolume { get; set; }
 
         // ---- On scene ----
 
@@ -108,16 +112,16 @@ namespace RealisticEMS
         [SettingsUISection(Driving, Corridor)]
         public bool OncomingOvertake { get; set; }
 
-        [SettingsUISection(Driving, LastResort)]
-        public bool DriveThrough { get; set; }
-
-        [SettingsUISection(Driving, LastResort)]
-        [SettingsUIDisableByCondition(typeof(Setting), nameof(DriveThrough), true)]
-        [SettingsUISlider(min = 1, max = 15, step = 1)]
-        public int DriveThroughSeconds { get; set; }
-
         [SettingsUISection(Driving, Vehicles)]
         public bool PoliceEmergencyDriving { get; set; }
+
+        /// <summary>Set when the setup screen (UI/src/mods/intro.tsx) was closed; until then it opens on every game load.</summary>
+        [SettingsUIHidden]
+        public bool IntroSeen { get; set; }
+
+        /// <summary>Version whose "what's new" screen (UI/src/mods/news.tsx) was closed; empty = never.</summary>
+        [SettingsUIHidden]
+        public string LastSeenVersion { get; set; }
 
         // ---- General ----
 
@@ -134,6 +138,17 @@ namespace RealisticEMS
         }
         private bool m_Log;
 
+        /// <summary>Button: copies the log into a signed export folder (LogExport).</summary>
+        [SettingsUISection(General, About)]
+        [SettingsUIButton]
+        public bool ExportLog { set => LogExport.Run(); }
+
+        /// <summary>Unlocks the Debug page in the dispatch window (DispatchUISystem.DebugUnlocked).</summary>
+        [SettingsUISection(General, About)]
+        [SettingsUITextInput]
+        public string DebugPassword { get; set; }
+        public const string DebugPasswordValue = "ems-debug";
+
         public override void SetDefaults()
         {
             RejectFullHospitals = true;
@@ -141,6 +156,7 @@ namespace RealisticEMS
             OnlyDepotsDispatch = true;
             ShowUnitNames = true;
             CallMix = CallMix.Realistic;
+            CallVolume = CallVolume.Balanced;
             EnableNef = false;
             NefPerHospital = 2;
             NefMaxWaitMinutes = 30;
@@ -153,12 +169,11 @@ namespace RealisticEMS
             MovingCorridor = true;
             OncomingOvertake = true;
             PoliceEmergencyDriving = true;
-            DriveThrough = false;
             TurnFromAnyLane = true;
             ClearRedLight = true;
             ClearRedLightMaxCars = 2;
-            DriveThroughSeconds = 3;
             LogAmbulanceStates = false;
+            DebugPassword = "";
             DepotAmbulances = 10;
             BedCapacityPercent = 25;
         }
@@ -206,7 +221,6 @@ namespace RealisticEMS
             Group(Setting.WayAhead, "Weg freimachen", "Clearing the way");
             Group(Setting.Lanes, "Spuren", "Lanes");
             Group(Setting.Corridor, "Rettungsgasse und Überholen", "Emergency corridor and overtaking");
-            Group(Setting.LastResort, "Letzter Ausweg", "Last resort");
             Group(Setting.Vehicles, "Fahrzeuge", "Vehicles");
             Group(Setting.About, "Info", "About");
 
@@ -229,6 +243,12 @@ namespace RealisticEMS
             d[m_Setting.GetEnumValueLocaleID(CallMix.Realistic)] = T("Realistisch", "Realistic");
             d[m_Setting.GetEnumValueLocaleID(CallMix.Balanced)] = T("Ausgewogen", "Balanced");
             d[m_Setting.GetEnumValueLocaleID(CallMix.Dramatic)] = T("Dramatisch", "Dramatic");
+            Opt(nameof(Setting.CallVolume), "Anzahl der Einsätze", "Number of calls",
+                "Wie viele Kranken- und Verletztenmeldungen es gibt. Wenige: etwa halb so viele wie in Vanilla. Ausgewogen: wie Vanilla. Viele: etwa doppelt so viele. Todesfälle sind nicht betroffen.",
+                "How many sick and injured calls happen. Few: about half of vanilla. Balanced: as vanilla. Many: about twice as many. Deaths are not affected.");
+            d[m_Setting.GetEnumValueLocaleID(CallVolume.Few)] = T("Wenige", "Few");
+            d[m_Setting.GetEnumValueLocaleID(CallVolume.Balanced)] = T("Ausgewogen", "Balanced");
+            d[m_Setting.GetEnumValueLocaleID(CallVolume.Many)] = T("Viele", "Many");
             Opt(nameof(Setting.BedCapacityPercent), "Bettenkapazität der Spitäler", "Hospital bed capacity",
                 "Anteil der Vanilla-Betten (Spital 500, Klinik 100). Bei 25% hat ein Spital 125 Betten und ist bei einer Welle schnell voll. Wirkt sofort.",
                 "Share of the vanilla beds (hospital 500, clinic 100). At 25% a hospital has 125 beds and fills up quickly during a wave. Applies immediately.");
@@ -275,17 +295,16 @@ namespace RealisticEMS
                 "Auf Straßen mit einer Spur pro Richtung weichen Lkw, Busse und Wohnmobile nicht aus. Steht so ein Fahrzeug in der Kolonne, wird die Gegenfahrbahn gesperrt: Autos, die in sie einfahren wollen, warten an der Kreuzung (ohne Umleitung). Ist sie leer, überholt der RTW die ganze Kolonne darauf. Danach fahren alle weiter. Fährt langsamer Verkehr vor dem RTW und ist die Gegenfahrbahn frei, überholt er ebenso. Feuerwehrautos mit Blaulicht überholen genauso (nur das, keine anderen Fahrhilfen).",
                 "On roads with one lane per direction, trucks, buses and campers do not move aside. If such a vehicle is in the queue, the oncoming lane is closed: cars about to enter it wait at the junction (no rerouting). Once it is empty, the ambulance overtakes the whole queue on it. Afterwards everyone drives on. Slower traffic moving ahead is overtaken the same way when the oncoming lane is free. Fire engines with lights overtake the same way (only this, no other driving aids).");
             Opt(nameof(Setting.PoliceEmergencyDriving), "Auch für Polizei mit Blaulicht", "Also for police with blue lights",
-                "Polizeiautos im Einsatz nutzen dieselben Hilfen wie der RTW: Vordermann drängen, Spurwechsel, Abbiegen von jeder Spur, Ampel freischalten, Rettungsgasse und Durchfahren.",
-                "Police cars on a call use the same aids as the ambulance: pushing vehicles ahead, lane change, turning from any lane, clearing red lights, emergency corridor and driving through.");
-            Opt(nameof(Setting.DriveThrough), "RTW fährt durch blockierende Autos", "Ambulance drives through blocking cars",
-                "Letzter Ausweg: steht der RTW trotzdem fest, fährt er durch das Auto hindurch (sichtbares Clipping).",
-                "Last resort: if the ambulance is still stuck, it drives through the car (visible clipping).");
-            Opt(nameof(Setting.DriveThroughSeconds), "Durchfahren nach (Sekunden)", "Drive through after (seconds)",
-                "Wie lange ein RTW blockiert sein muss, bevor er durchfährt.",
-                "How long an ambulance must be blocked before it drives through.");
+                "Polizeiautos im Einsatz nutzen dieselben Hilfen wie der RTW: Vordermann drängen, Spurwechsel, Abbiegen von jeder Spur, Ampel freischalten und Rettungsgasse.",
+                "Police cars on a call use the same aids as the ambulance: pushing vehicles ahead, lane change, turning from any lane, clearing red lights and emergency corridor.");
             Opt(nameof(Setting.LogAmbulanceStates), "Debug-Protokoll", "Debug logging",
                 "Schreibt jede Zustandsänderung und Entscheidung nach Logs/RealisticEMS.log. Nur zur Fehlersuche, Warnungen und Fehler werden immer protokolliert.",
                 "Writes every state change and decision to Logs/RealisticEMS.log. For bug reports only; warnings and errors are always logged.");
+            Opt(nameof(Setting.ExportLog), "Protokoll exportieren", "Export log",
+                "Kopiert das Protokoll mit Hash und Signatur in einen Ordner unter Logs/, damit nachweisbar ist, dass es nicht verändert wurde.",
+                "Copies the log with a hash and signature into a folder under Logs/, so it can be proven unmodified.");
+            Opt(nameof(Setting.DebugPassword), "Debug-Passwort", "Debug password",
+                "Schaltet die Debug-Seite in der Leitstelle frei.", "Unlocks the Debug page in the dispatch window.");
             Opt(nameof(Setting.DepotAmbulances), "RTW pro Wache", "Ambulances per depot",
                 "Fahrzeuganzahl der Rettungswache. Erfordert Neustart.",
                 "Vehicle count of the Ambulance Depot. Requires restart.");

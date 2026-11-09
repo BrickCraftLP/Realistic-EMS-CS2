@@ -2,32 +2,75 @@
 	<!-- Leave ModId empty for the first publish; the publisher fills it in. Keep it afterwards. -->
 	<ModId Value="166759" />
 	<DisplayName Value="Realistic EMS (Beta)" />
-	<ShortDescription Value="Ambulance depots, AMPDS call codes, emergency doctors, emergency corridors and realistic on-scene care." />
+	<ShortDescription Value="Ambulance depots, AMPDS call codes, emergency doctors, call volume, emergency corridors and realistic on-scene care." />
 	<LongDescription>
 Realistic EMS reworks how ambulances work, modelled on Vienna's emergency medical service.
 
-**BETA:** Back up your saves. Please report bugs and issues on GitHub: https://github.com/BrickCraftLP/Realistic-EMS-CS2/issues - attach Logs/RealisticEMS.log (turn on "Debug logging" in the options first).
+**BETA:** Back up your saves. Please report bugs and issues on GitHub: https://github.com/BrickCraftLP/Realistic-EMS-CS2/issues - attach the log: turn on "Debug logging" in the options, then press "Export log" and attach the new folder from Logs/.
 
-Features
-- Ambulance Depot: a station without beds that houses many ambulances.
-- Ambulances only take patients to hospitals with a free bed, and only take new calls once back at their depot.
+**Setup screen:** on your first game load a short setup screen lets you pick the options that matter most. You can open it again any time from the Dashboard of the EMS panel.
+
+Dispatch and logistics
+- Ambulance Depot: a station without beds that houses many ambulances (count configurable). Once one exists, hospitals stop dispatching ambulances.
+- Returning ambulances only take new calls once they are back at their depot.
+- Ambulances only take patients to hospitals with a free bed and the right care. If none qualifies, vanilla ranking is the fallback, so nobody is stranded.
 - Configurable hospital bed capacity.
-- Unit callsigns and AMPDS call codes (Einsatzcodes Wien) with live call status.
+
+Calls and crews
+- Unit callsigns and AMPDS call codes (Einsatzcodes Wien) with live call status. The code decides what is sent: ambulance, emergency doctor, police or fire brigade.
+- Call volume: choose Few (about half of vanilla), Balanced (as vanilla) or Many (about twice as many) sick and injured calls. Deaths are not affected.
+- Call mix: Realistic, Balanced or Dramatic severity.
 - Emergency doctor cars (NEF) from hospitals (experimental).
-- On-scene care time; police and fire brigade are dispatched for matching codes.
-- Vehicles on scene park off the road: on the sidewalk, in parking lanes or at intersection corners.
-- Emergency driving: pushing vehicles ahead, lane changes, turning from any lane, clearing red lights, emergency corridors.
+- Police and fire brigade are sent along for matching codes.
+
+On scene
+- On-scene care time: the crew stays with the patient before transport. Driving time does not count.
+- Vehicles park off the road: on the sidewalk, in parking lanes or at intersection corners. A free parking spot is used before the sidewalk.
+
+Emergency driving (vehicles with lights on)
+- Push blocking vehicles ahead, change lanes, turn from any lane, clear red lights.
+- Emergency corridor: traffic moves to the edges and the ambulance passes between.
+- Overtake slow traffic and trucks on the oncoming lane when it is free. Fire engines overtake too.
+- Stuck guard: vanilla no longer deletes an ambulance that is only briefly deadlocked.
 
 Every feature can be switched off in Options. German and English.
+
+AI disclosure: the logo, layout and illustrations of the preview images were designed with AI. The photos are traced from my own in-game screenshots.
 	</LongDescription>
-	<!-- Add a 256x256 (or larger, square) PNG at this path before publishing. -->
 	<Thumbnail Value="Properties/Thumbnail.png" />
-	<Screenshot Value="Properties/Screenshot.jpg" />
+	<Screenshot Value="Properties/Screenshot1.jpg" />
+	<Screenshot Value="Properties/Screenshot2.jpg" />
+	<Screenshot Value="Properties/Screenshot3.jpg" />
+	<Screenshot Value="Properties/Screenshot4.jpg" />
+	<Screenshot Value="Properties/Screenshot5.jpg" />
+	<Screenshot Value="Properties/Screenshot6.jpg" />
+	<Screenshot Value="Properties/Screenshot7.jpg" />
 	<Tag Value="Code Mod" />
 	<ForumLink Value="" />
-	<ModVersion Value="26.0.0b" />
+	<ModVersion Value="26.0.1b" />
 	<GameVersion Value="1.*" />
 	<ChangeLog>
+26.0.1b
+New
+- Call volume option: Few, Balanced or Many sick and injured calls (about half, as vanilla, about twice). Deaths are not affected.
+- Setup screen on the first game load, and again from the Dashboard of the EMS panel. It sets the main options in a few steps.
+- "What's new" screen after every update: the last 3 changelogs, plus a button to open the GitHub issues page for bug reports.
+- Fire engines never get an emergency corridor (too big). They overtake on a free lane, or on the oncoming lane for any standing queue.
+- Anything on the oncoming lane ahead of an overtaking ambulance now stops and keeps right.
+- "Export log" button in the options: copies the log into a signed folder under Logs/, so bug reports can be shown to be unmodified. The Debug page now needs the debug password (Options > About).
+
+Fixed
+- Blue lights stayed on after the call was finished or while the ambulance drove home without a critical patient. They now switch off.
+- Ambulances slid sideways the whole way when leaving the queue (crab-walking). They now pull out diagonally while driving.
+- Parked vehicles could teleport far away and visibly vanish and reappear. Parking is now limited to a short distance.
+- Emergency corridor on roads with two or more lanes: cars now move far enough aside for the ambulance to pass between the lanes, and a green light no longer breaks the corridor up.
+- Ambulances hopped back and forth between lanes when overtaking a queue, so they never got into the lane needed to turn.
+- Turning from the wrong lane (e.g. right turn from the left-turn lane) failed on wide junctions.
+- Emergency doctor cars from a saved game were dispatched and sent home in an endless loop.
+
+Removed
+- Drive-through last resort and its two options. Ambulances no longer clip through blocking cars. Police emergency driving no longer includes it.
+
 26.0.0b: first public beta. Emergency vehicles stay closer to the middle when passing next to oncoming traffic and no longer squeeze past oncoming trucks. Angled parking keeps the rear out of the driving lane and the nose on the pavement. A free parking spot is used before the sidewalk. Behind slower moving traffic, emergency vehicles overtake on the oncoming lane when it is free. Fire engines also overtake on the oncoming lane. Pedestrian streets: vehicles stop where they are on scene, no emergency driving aids there.
 	</ChangeLog>
 </Publish>

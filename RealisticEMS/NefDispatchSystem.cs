@@ -219,7 +219,9 @@ namespace RealisticEMS
                 bool dead = mission != null && em.HasComponent<HealthProblem>(mission.Patient)
                     && (em.GetComponentData<HealthProblem>(mission.Patient).m_Flags & HealthProblemFlags.Dead) != 0;
                 bool busy = (a.m_State & (AmbulanceFlags.Dispatched | AmbulanceFlags.Transporting)) != 0;
-                if (mission == null && !busy) { em.AddComponent<Deleted>(nef); return; } // home / idle: done
+                // No mission (e.g. NEF from a save; missions are not saved): vanilla would keep dispatching it and we
+                // would keep sending it home every tick. It is never a regular ambulance, so remove it.
+                if (mission == null) { em.AddComponent<Deleted>(nef); return; }
                 // Safety net for a stuck NEF; the normal end is vanilla's "patient gone".
                 int timeout = (int)((Mod.Setting.NefMaxWaitMinutes + Mod.Setting.OnSceneMinutes + 120) * OnSceneCareSystem.FramesPerGameMinute);
                 if (mission == null || dead || mission.Frames > timeout) SendHome(nef, ref a, dead ? "Patient verstorben" : mission == null ? "Einsatz beendet" : "Zeitüberschreitung");

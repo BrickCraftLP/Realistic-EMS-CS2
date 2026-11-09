@@ -5,7 +5,7 @@
   <PropertyGroup>
     <AssemblyName>RealisticEMS</AssemblyName>
     <RootNamespace>RealisticEMS</RootNamespace>
-    <Version>26.0.0</Version>
+    <Version>26.0.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
