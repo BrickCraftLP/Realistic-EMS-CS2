@@ -1,0 +1,515 @@
+code;complaint;reason;units;complaint_en;reason_en
+01A01;Bauchschmerzen/-beschwerden;Bauchschmerzen;KTW;Abdominal pain/problems;Abdominal pain
+01A02;Bauchschmerzen/-beschwerden;Nicht traumatische Hoden-/Leistenschmerzen (Mann);KTW;Abdominal pain/problems;Non-traumatic testicle/groin pain (male)
+01C00;Bauchschmerzen/-beschwerden;Aufwertung;RTW;Abdominal pain/problems;Override
+01C01;Bauchschmerzen/-beschwerden;Vermutetes Aortenaneurysma (Zerreißungsschmerz) > 50 Jahre;RTW;Abdominal pain/problems;Suspected aortic aneurysm (tearing pain) > 50 years
+01C02;Bauchschmerzen/-beschwerden;Bekanntes Aortenaneurysma;RTW;Abdominal pain/problems;Known aortic aneurysm
+01C03;Bauchschmerzen/-beschwerden;Ohnmacht > 50 Jahre;RTW;Abdominal pain/problems;Fainting > 50 years
+01C04;Bauchschmerzen/-beschwerden;Frauen mit Ohnmacht 12-50 Jahre;RTW;Abdominal pain/problems;Females 12-50 years with fainting
+01C05;Bauchschmerzen/-beschwerden;Männer mit Schmerzen oberh. Bauchnabel > 35 Jahre;RTW;Abdominal pain/problems;Males with pain above navel > 35 years
+01C06;Bauchschmerzen/-beschwerden;Frauen mit Schmerzen oberh. Bauchnabel > 45 Jahre;RTW;Abdominal pain/problems;Females with pain above navel > 45 years
+01D00;Bauchschmerzen/-beschwerden;Aufwertung;RTW / NEF;Abdominal pain/problems;Override
+01D01;Bauchschmerzen/-beschwerden;Bewusstseinstrübung;RTW;Abdominal pain/problems;Not alert
+01D02;Bauchschmerzen/-beschwerden;Aschfahle oder graue Hautfarbe gemeldet > 50;RTW;Abdominal pain/problems;Ashen or grey colour reported > 50
+02A01;Allergie/Kontakt mit giftigen Tieren;Keine Atem- und Schluckbeschwerden (Ausschlag oder Juckreiz kann vorhanden sein);ad 1450 (TEWEB) oder KTW;Allergies/envenomation;No difficulty breathing or swallowing (rash or itching may be present)
+02A02;Allergie/Kontakt mit giftigen Tieren;Spinnenbiss;ad 1450 (TEWEB) oder KTW;Allergies/envenomation;Spider bite
+02B00;Allergie/Kontakt mit giftigen Tieren;Aufwertung;RTW;Allergies/envenomation;Override
+02B01;Allergie/Kontakt mit giftigen Tieren;Unbekannter Zustand/Andere Codes nicht zutreffend;RTW;Allergies/envenomation;Unknown status/other codes not applicable
+02C00;Allergie/Kontakt mit giftigen Tieren;Aufwertung;RTW;Allergies/envenomation;Override
+02C01;Allergie/Kontakt mit giftigen Tieren;Atem- oder Schluckbeschwerden;RTW;Allergies/envenomation;Difficulty breathing or swallowing
+02C02;Allergie/Kontakt mit giftigen Tieren;Schwere allergische Reaktion-Vorgeschichte;RTW;Allergies/envenomation;History of severe allergic reaction
+02D00;Allergie/Kontakt mit giftigen Tieren;Aufwertung;RTW / NEF;Allergies/envenomation;Override
+02D01;Allergie/Kontakt mit giftigen Tieren;Bewusstseinstrübung;RTW / FISU;Allergies/envenomation;Not alert
+02D02;Allergie/Kontakt mit giftigen Tieren;Sprachschwierigkeiten zwischen Atemzügen;RTW;Allergies/envenomation;DIFFICULTY SPEAKING BETWEEN BREATHS
+02D03;Allergie/Kontakt mit giftigen Tieren;Angriff von Insektenschwarm (Bienen, Wespen, Hornissen,...);RTW;Allergies/envenomation;Swarming attack (bees, wasps, hornets, ...)
+02D04;Allergie/Kontakt mit giftigen Tieren;Schlangenbiss;RTW;Allergies/envenomation;Snakebite
+02E00;Allergie/Kontakt mit giftigen Tieren;Aufwertung;RTW / NEF / FISU / AED;Allergies/envenomation;Override
+02E01;Allergie/Kontakt mit giftigen Tieren;Ineffektive Atmung;RTW / NEF / FISU / AED;Allergies/envenomation;INEFFECTIVE BREATHING
+03A01;Tierbiss/-angriff;Markierte(*)Ungefährliche Körperregion mit Fehlstellung;KTW;Animal bites/attacks;Marked (*) not dangerous body area with deformity
+03A02;Tierbiss/-angriff;Ungefährliche Körperregion;KTW;Animal bites/attacks;Not dangerous body area
+03A03;Tierbiss/-angriff;Ältere (>= 6h) Verletzungen (ohne Notfallleitsymptome);ad 1450 (TEWEB);Animal bites/attacks;Non-recent (>= 6h) injuries (no priority symptoms)
+03A04;Tierbiss/-angriff;Oberflächliche Bisswunde;ad 1450 (TEWEB);Animal bites/attacks;Superficial bite
+03B00;Tierbiss/-angriff;Aufwertung;NKT;Animal bites/attacks;Override
+03B01;Tierbiss/-angriff;Möglicherweise gefährliche Körperregion;NKT;Animal bites/attacks;POSSIBLY DANGEROUS body area
+03B02;Tierbiss/-angriff;Starke Blutung;NKT;Animal bites/attacks;Serious haemorrhage
+03B03;Tierbiss/-angriff;Unbekannter Zustand;NKT;Animal bites/attacks;Unknown status
+03D00;Tierbiss/-angriff;Aufwertung;RTW / NEF;Animal bites/attacks;Override
+03D01;Tierbiss/-angriff;Kreislaufstillstand;RTW / NEF / FISU / HI / AED;Animal bites/attacks;Cardiac arrest
+03D02;Tierbiss/-angriff;Bewusstlos;RTW / NEF / FISU / HI;Animal bites/attacks;Unconscious
+03D03;Tierbiss/-angriff;Bewusstseinstrübung;RTW / NEF / FISU;Animal bites/attacks;Not alert
+03D04;Tierbiss/-angriff;Verletzungen im Brust-/Halsbereich (mit Atembeschwerden);RTW / FISU;Animal bites/attacks;Chest/neck injuries (with difficulty breathing)
+03D05;Tierbiss/-angriff;Gefährliche Körperregion;RTW;Animal bites/attacks;Dangerous body area
+03D06;Tierbiss/-angriff;Großes Tier;RTW / HI;Animal bites/attacks;Large animal
+03D07;Tierbiss/-angriff;Exotisches Tier;RTW / HI;Animal bites/attacks;Exotic animal
+03D08;Tierbiss/-angriff;Angriff durch Hund oder mehrere Tiere;RTW / HI;Animal bites/attacks;Attack by dog or multiple animals
+03D09;Tierbiss/-angriff;Momentaner Angriff;RTW / HI;Animal bites/attacks;Attack in progress
+04A01;Verbrechen;Ungefährliche Körperregion mit Fehlstellung;RTW;Assault;Not dangerous body area with deformity
+04A02;Verbrechen;UNGEFÄHRLICHE Körperregion;KTW;Assault;Not dangerous body area
+04A03;Verbrechen;ÄLTERE Verletzungen (>= 6h);KTW;Assault;NON-RECENT injuries (>= 6h)
+04B00;Verbrechen;Aufwertung;RTW;Assault;Override
+04B01;Verbrechen;MÖGLICHERWEISE GEFÄHRLICHE Körperregion;NKT;Assault;POSSIBLY DANGEROUS body area
+04B02;Verbrechen;STARKE Blutung;RTW;Assault;Serious haemorrhage
+04B03;Verbrechen;Unbekannter Zustand/Andere Codes nicht zutreffend;NKT;Assault;Unknown status/other codes not applicable
+04D00;Verbrechen;Aufwertung;RTW / NEF / OA;Assault;Override
+04D01;Verbrechen;Kreislaufstillstand;RTW / NEF / FISU / AED;Assault;Cardiac arrest
+04D02;Verbrechen;Bewusstlos;RTW / NEF / FISU �/ OA;Assault;Unconscious
+04D03;Verbrechen;Bewusstseinstrübung;RTW;Assault;Not alert
+04D04;Verbrechen;Verletzungen im Brust- oder Halsbereich (mit Atembeschwerden);RTW;Assault;Chest or neck injuries (with difficulty breathing)
+04D05;Verbrechen;Mehrere Verletzte;2 RTW / FISU / SEG-1;Assault;Multiple patients
+05A01;Rückenschmerzen;Nicht traumatische Rückenschmerzen;ad 1450 (TEWEB) oder KTW;Back pain;Non-traumatic back pain
+05A02;Rückenschmerzen;Ältere (>= 6h) traumatische Rückenschmerzen (ohne Notfallleitsymptome);ad 1450 (TEWEB) oder KTW;Back pain;Non-recent (>= 6h) traumatic back pain (no priority symptoms)
+05C00;Rückenschmerzen;Aufwertung;RTW;Back pain;Override
+05C01;Rückenschmerzen;Vermutetes Aortenaneurysma (Zerreißungsschmerz) > 50 Jahre;RTW;Back pain;Suspected aortic aneurysm (tearing pain) > 50 years
+05C02;Rückenschmerzen;Bekanntes Aortenaneurysma;RTW;Back pain;Known aortic aneurysm
+05C03;Rückenschmerzen;Ohnmacht/ Beinahe-Ohnmacht >= 50 Jahre;RTW;Back pain;Fainting/near fainting >= 50 years
+05C04;Rückenschmerzen;Atembeschwerden;RTW;Back pain;Breathing problems
+05D00;Rückenschmerzen;Aufwertung;RTW / NEF;Back pain;Override
+05D01;Rückenschmerzen;Bewusstseinstrübung;RTW;Back pain;Not alert
+05D02;Rückenschmerzen;Aschfahle oder graue Hautfarbe gemeldet >= 50 Jahre;RTW;Back pain;Ashen or grey colour reported >= 50 years
+06C01;Atembeschwerden;Abnorme Atmung;RTW;Breathing problems;Abnormal breathing
+06C02;Atembeschwerden;Tracheostomaproblem (keine offensichtliche Atemnot);RTW;Breathing problems;Tracheostomy problem (no obvious distress)
+06D00;Atembeschwerden;Aufwertung;RTW / NEF;Breathing problems;Override
+06D01;Atembeschwerden;Bewusstseinstrübung;RTW / NEF;Breathing problems;Not alert
+06D02;Atembeschwerden;SPRACHSCHWIERIGKEITEN ZWISCHEN ATEMZÜGEN;RTW;Breathing problems;DIFFICULTY SPEAKING BETWEEN BREATHS
+06D03;Atembeschwerden;VERÄNDERTE HAUTFARBE;RTW;Breathing problems;CHANGE IN SKIN COLOUR
+06D04;Atembeschwerden;Kaltschweißig;RTW;Breathing problems;Clammy
+06D05;Atembeschwerden;Tracheostomaproblem;RTW;Breathing problems;Tracheostomy problem
+06E00;Atembeschwerden;Aufwertung;RTW / NEF;Breathing problems;Override
+06E01;Atembeschwerden;INEFFEKTIVE ATMUNG;RTW / NEF / FISU / AED;Breathing problems;INEFFECTIVE BREATHING
+07A01;Verbrennungen/Explosion;Verbrennungen < 18% Körperoberfläche;NKT;Burns/explosion;Burns < 18% body area
+07A02;Verbrennungen/Explosion;Brandalarm (unklare Situation);RTW / HI;Burns/explosion;Fire alarm (unknown situation)
+07A03;Verbrennungen/Explosion;Geringfügige Verbrennungen;ad 1450 (TEWEB) oder KTW;Burns/explosion;Minor burns
+07A04;Verbrennungen/Explosion;Sonnenbrand;ad 1450 (TEWEB) oder KTW;Burns/explosion;Sunburn
+07A05;Verbrennungen/Explosion;Ältere (>=6h) Verbrennungen/Verletzungen (ohne Notfallleitsymptome);ad 1450 (TEWEB) oder KTW;Burns/explosion;Non-recent (>= 6h) burns/injuries (no priority symptoms)
+07B00;Verbrennungen/Explosion;Aufwertung;NKT;Burns/explosion;Override
+07B01;Verbrennungen/Explosion;Verletzungen durch Explosion (ohne Notfallleitsymptome);NKT;Burns/explosion;Blast injuries (no priority symptoms)
+07B02;Verbrennungen/Explosion;Unbekannter Zustand/Andere Codes nicht zutreffend;NKT / HI;Burns/explosion;Unknown status/other codes not applicable
+07C00;Verbrennungen/Explosion;Aufwertung;RTW / FISU;Burns/explosion;Override
+07C01;Verbrennungen/Explosion;Gebäudebrand mit eingeschlossen Person(en);SEG / FISU / RTW / NEF / OA;Burns/explosion;Building fire with person(s) trapped
+07C02;Verbrennungen/Explosion;Atembeschwerden;RTW;Burns/explosion;Breathing problems
+07C03;Verbrennungen/Explosion;Verbrennungen >= 18% Körperoberfläche;RTW / NEF;Burns/explosion;Burns >= 18% body area
+07C04;Verbrennungen/Explosion;Schwere Verbrennungen im Gesicht;RTW / NEF / FISU;Burns/explosion;Severe facial burns
+07D00;Verbrennungen/Explosion;Verbrennungen - Aufwertung;RTW / NEF;Burns/explosion;Burns - override
+07D01;Verbrennungen/Explosion;Mehrere Verletzte;2 RTW / FISU / OA / SEG-1;Burns/explosion;Multiple patients
+07D02;Verbrennungen/Explosion;Kreislaufstillstand;RTW / NEF / FISU / AED / HI;Burns/explosion;Cardiac arrest
+07D03;Verbrennungen/Explosion;Bewusstlos;RTW / NEF / FISU / OA / HI;Burns/explosion;Unconscious
+07D04;Verbrennungen/Explosion;Bewusstseinstrübung;RTW / NEF / OA;Burns/explosion;Not alert
+07D05;Verbrennungen/Explosion;SPRACHSCHWIERIGKEITEN ZWISCHEN ATEMZÜGEN;RTW;Burns/explosion;DIFFICULTY SPEAKING BETWEEN BREATHS
+07E00;Verbrennungen/Explosion;Aufwertung;RTW / NEF / FISU / OA / HI;Burns/explosion;Override
+07E01;Verbrennungen/Explosion;Brennende Person;RTW / NEF / FISU / OA / HI;Burns/explosion;Person on fire
+08O01;Kohlenmonoxid;Kohlenmonoxid-Alarm (Person ohne Notfallleitsymptome vor Ort);KTW;Carbon monoxide;Carbon monoxide alarm (person on scene without priority symptoms)
+08O02;Kohlenmonoxid;Kohlenmonoxid-Alarm (automatischer Alarm);KTW;Carbon monoxide;Carbon monoxide alarm (automatic alarm)
+08B00;Kohlenmonoxid;Aufwertung;RTW / HI;Carbon monoxide;Override
+08B01;Kohlenmonoxid;Wach ohne Atembeschwerden;RTW / HI;Carbon monoxide;Alert without difficulty breathing
+08C00;Kohlenmonoxid;Aufwertung;RTW / NEF / HI;Carbon monoxide;Override
+08C01;Kohlenmonoxid;Wach mit Atembeschwerden;RTW / HI;Carbon monoxide;Alert with difficulty breathing
+08D00;Kohlenmonoxid;Aufwertung;RTW / NEF / HI;Carbon monoxide;Override
+08D01;Kohlenmonoxid;Kreislaufstillstand;RTW / NEF / FISU / AED / SEG-1;Carbon monoxide;Cardiac arrest
+08D02;Kohlenmonoxid;Bewusstlos;RTW / NEF / FISU / SEG-1;Carbon monoxide;Unconscious
+08D03;Kohlenmonoxid;Bewusstseinstrübung;RTW / NEF / FISU / SEG-1;Carbon monoxide;Not alert
+08D04;Kohlenmonoxid;SPRACHSCHWIERIGKEITEN ZWISCHEN ATEMZÜGEN;RTW / FISU / HI;Carbon monoxide;DIFFICULTY SPEAKING BETWEEN BREATHS
+08D05;Kohlenmonoxid;Mehrere Verletzte;2 RTW / NEF / FISU / OA / SEG-1;Carbon monoxide;Multiple patients
+08D06;Kohlenmonoxid;Unbekannter Zustand/Andere Codes nicht zutreffend;RTW / HI;Carbon monoxide;Unknown status/other codes not applicable
+09O01;Kreislaufstillstand;ERWARTETER TOD unzweifelhaft;MA15;Cardiac arrest;EXPECTED DEATH unquestionable
+09B00;Kreislaufstillstand;Aufwertung;RTW / NEF;Cardiac arrest;Override
+09B01;Kreislaufstillstand;OFFENSICHTLICH TOTE PERSON unzweifelhaft;MA15;Cardiac arrest;OBVIOUS DEATH unquestionable
+09D00;Kreislaufstillstand;Aufwertung;RTW / NEF / FISU;Cardiac arrest;Override
+09D01;Kreislaufstillstand;INEFFEKTIVE ATMUNG;RTW / NEF / FISU / AED;Cardiac arrest;INEFFECTIVE BREATHING
+09D02;Kreislaufstillstand;OFFENSICHTLICHER oder ERWARTETER TOD zweifelhaft;NEF / RTW;Cardiac arrest;OBVIOUS or EXPECTED DEATH questionable
+09E00;Kreislaufstillstand;Aufwertung;RTW / NEF / FISU / AED;Cardiac arrest;Override
+09E01;Kreislaufstillstand;Atemstillstand;RTW / NEF / FISU / AED;Cardiac arrest;Respiratory arrest
+09E02;Kreislaufstillstand;Ungewisse Atmung (Agonal);RTW / NEF / FISU / AED;Cardiac arrest;Uncertain breathing (agonal)
+09E03;Kreislaufstillstand;Erhängen;RTW / NEF / FISU / AED;Cardiac arrest;Hanging
+09E04;Kreislaufstillstand;Strangulierung;RTW / NEF / FISU / AED;Cardiac arrest;Strangulation
+09E05;Kreislaufstillstand;Ersticken - äußere Einflüsse;RTW / NEF / FISU / AED;Cardiac arrest;Suffocation - external cause
+10A01;Brustschmerzen;Normale Atmung < 35 Jahre;NKT;Chest pain;Normal breathing < 35 years
+10C00;Brustschmerzen;Aufwertung;RTW;Chest pain;Override
+10C01;Brustschmerzen;Abnorme Atmung;RTW;Chest pain;Abnormal breathing
+10C02;Brustschmerzen;Kokainmissbrauch;RTW;Chest pain;Cocaine abuse
+10C03;Brustschmerzen;Normale Atmung >= 35 Jahre;RTW;Chest pain;Normal breathing >= 35 years
+10D00;Brustschmerzen;Aufwertung;RTW / NEF;Chest pain;Override
+10D01;Brustschmerzen;Bewusstseinstrübung;RTW / NEF;Chest pain;Not alert
+10D02;Brustschmerzen;SPRACHSCHWIERIGKEITEN ZWISCHEN ATEMZÜGEN;RTW / NEF;Chest pain;DIFFICULTY SPEAKING BETWEEN BREATHS
+10D03;Brustschmerzen;VERÄNDERTE HAUTFARBE;RTW / NEF;Chest pain;CHANGE IN SKIN COLOUR
+10D04;Brustschmerzen;Kaltschweißig;RTW / NEF;Chest pain;Clammy
+10D05;Brustschmerzen;Herzinfarkt/Angina Pectoris-Vorgeschichte;RTW / NEF;Chest pain;History of heart attack/angina
+11A01;Ersticken;Jetzt keine Atemwegsverlegung (kann reden oder schreien, ist wach und atmet normal);ad 1450 (TEWEB) oder KTW;Choking;Not choking now (can talk or cry, alert and breathing normally)
+11D00;Ersticken;Aufwertung;RTW / NEF;Choking;Override
+11D01;Ersticken;Abnorme Atmung (TEILWEISE Atemwegsverlegung);RTW / NEF / FISU;Choking;Abnormal breathing (PARTIAL airway obstruction)
+11D02;Ersticken;Bewusstseinstrübung;RTW / NEF;Choking;Not alert
+11E00;Ersticken;Aufwertung;RTW / NEF / FISU;Choking;Override
+11E01;Ersticken;KOMPLETTE Atemwegsverlegung/INEFFEKTIVE ATMUNG;RTW / NEF / FISU / AED;Choking;COMPLETE airway obstruction/INEFFECTIVE BREATHING
+12A01;Krampfanfall;Nicht mehr krampfend und effektive Atmung überprüft (bekannte Epilepsie);KTW;Convulsions/seizures;Not seizing now, effective breathing verified (known epilepsy)
+12A02;Krampfanfall;Nicht mehr krampfend und effektive Atmung überprüft (Epilepsie unbekannt);KTW;Convulsions/seizures;Not seizing now, effective breathing verified (epilepsy unknown)
+12A03;Krampfanfall;Nicht mehr krampfend und effektive Atmung überprüft (<=6, keine Epilepsie bestätigt);NKT;Convulsions/seizures;Not seizing now, effective breathing verified (<= 6, no epilepsy confirmed)
+12A04;Krampfanfall;Fokaler / Absence Krampfanfall (ansprechbar);KTW;Convulsions/seizures;Focal / absence seizure (responsive)
+12A05;Krampfanfall;Drohender Krampfanfall (Aura);KTW;Convulsions/seizures;Impending seizure (aura)
+12B00;Krampfanfall;Aufwertung;RTW;Convulsions/seizures;Override
+12B01;Krampfanfall;Effektive Atmung nicht überprüft < 35 Jahre;RTW;Convulsions/seizures;Effective breathing not verified < 35 years
+12C00;Krampfanfall;Aufwertung;RTW / NEF;Convulsions/seizures;Override
+12C01;Krampfanfall;Fokaler / Absence Krampfanfall (nicht ansprechbar);RTW;Convulsions/seizures;Focal / absence seizure (unresponsive)
+12C02;Krampfanfall;Schwangerschaft;RTW;Convulsions/seizures;Pregnancy
+12C03;Krampfanfall;Diabetiker;RTW;Convulsions/seizures;Diabetic
+12C04;Krampfanfall;Nicht mehr krampfend und effektive Atmung überprüft (>6, keine Epilepsie bestätigt);RTW;Convulsions/seizures;Not seizing now, effective breathing verified (> 6, no epilepsy confirmed)
+12C05;Krampfanfall;Schlaganfall oder Gehirntumor-Vorgeschichte;RTW;Convulsions/seizures;History of stroke or brain tumour
+12C06;Krampfanfall;Überdosis/Vergiftung (Einnahme);RTW;Convulsions/seizures;Overdose/poisoning (ingestion)
+12C07;Krampfanfall;Atypischer Krampfanfall;RTW;Convulsions/seizures;Atypical seizure
+12D00;Krampfanfall;Aufwertung;RTW / NEF;Convulsions/seizures;Override
+12D01;Krampfanfall;Atemstillstand (nach den Schlüsselfragen);RTW / NEF / FISU / AED;Convulsions/seizures;Respiratory arrest (after key questions)
+12D02;Krampfanfall;ANDAUERNDER oder MULTIPLE Krampfanfälle;RTW;Convulsions/seizures;CONTINUOUS or MULTIPLE seizures
+12D03;Krampfanfall;AGONALE/INEFFEKTIVE ATMUNG;RTW / NEF / FISU / AED;Convulsions/seizures;AGONAL/INEFFECTIVE BREATHING
+12D04;Krampfanfall;Effektive Atmung nicht überprüft >= 35 Jahre;RTW;Convulsions/seizures;Effective breathing not verified >= 35 years
+13A01;Blutzuckerentgleisung;Ansprechbar und verhält sich normal;KTW;Diabetic problems;Responsive and behaving normally
+13C00;Blutzuckerentgleisung;Aufwertung;RTW;Diabetic problems;Override
+13C01;Blutzuckerentgleisung;Bewusstseinstrübung;RTW;Diabetic problems;Not alert
+13C02;Blutzuckerentgleisung;Abnormales Verhalten;RTW;Diabetic problems;Abnormal behaviour
+13C03;Blutzuckerentgleisung;Abnorme Atmung;RTW;Diabetic problems;Abnormal breathing
+13D00;Blutzuckerentgleisung;Aufwertung;RTW / NEF;Diabetic problems;Override
+13D01;Blutzuckerentgleisung;Bewusstlos;RTW;Diabetic problems;Unconscious
+14A01;Ertrinken;Ansprechbar und normale Atmung (keine Verletzungen und nicht im Wasser);RTW;Drowning;Responsive and breathing normally (no injuries and out of water)
+14B00;Ertrinken;Aufwertung;RTW;Drowning;Override
+14B01;Ertrinken;Ansprechbar und normale Atmung (Verletzungen oder im Wasser);RTW;Drowning;Responsive and breathing normally (injuries or in water)
+14B02;Ertrinken;Offensichtlich Tote Person (Unterwasserzeit >=6h);MA15;Drowning;Obviously dead person (submerged >= 6h)
+14B03;Ertrinken;Unbekannter Zustand/Andere Codes nicht zutreffend;RTW;Drowning;Unknown status/other codes not applicable
+14C00;Ertrinken;Aufwertung;RTW;Drowning;Override
+14C01;Ertrinken;Ansprechbar mit abnormer Atmung;RTW;Drowning;Responsive with abnormal breathing
+14D00;Ertrinken;Aufwertung;RTW / NEF;Drowning;Override
+14D01;Ertrinken;Bewusstlos;RTW / NEF / FISU / HI / Tauch / C9;Drowning;Unconscious
+14D02;Ertrinken;Unter Wasser (Spezialkräfte erforderlich);RTW / NEF / FISU / HI / AED / Tauch / C9 / REF;Drowning;Underwater (specialised rescue needed)
+14D03;Ertrinken;Gestrandet (Spezialkräfte erforderlich);RTW;Drowning;Stranded (specialised rescue needed)
+14D04;Ertrinken;Soeben wiederbelebt und/oder äußerlich defibrilliert (äußerlich);RTW / NEF / FISU;Drowning;Just resuscitated and/or defibrillated (external)
+14D05;Ertrinken;Bewusstseinseintrübung;RTW;Drowning;Not alert
+14D06;Ertrinken;Verdacht auf HWS-Verletzung;RTW;Drowning;Suspected neck injury
+14E00;Ertrinken;Aufwertung;RTW / NEF / FISU / HI;Drowning;Override
+14E01;Ertrinken;Kreislaufstillstand (nicht mehr im Wasser);RTW / NEF / FISU / AED;Drowning;Cardiac arrest (out of water)
+14E02;Ertrinken;Unter Wasser (Keine Spezialkräfte erforderlich z.B. Badewanne, Pool, etc.);RTW / NEF / FISU / AED;Drowning;Underwater (no specialised rescue needed, e.g. bathtub, pool)
+15C01;Stromunfall/Blitzschlag;Ansprechbar und normale Atmung;RTW;Electrocution/lightning;Responsive and breathing normally
+15D00;Stromunfall/Blitzschlag;Aufwertung;RTW / NEF / FISU;Electrocution/lightning;Override
+15D01;Stromunfall/Blitzschlag;Mehrere Verletzte;2 RTW / NEF / FISU / OA / SEG-1;Electrocution/lightning;Multiple patients
+15D02;Stromunfall/Blitzschlag;Bewusstlos;RTW / NEF / FISU / HI;Electrocution/lightning;Unconscious
+15D03;Stromunfall/Blitzschlag;Patient noch nicht von der Stromquelle getrennt;RTW / NEF / FISU / HI;Electrocution/lightning;Patient still in contact with power source
+15D04;Stromunfall/Blitzschlag;Stromzufuhr nicht unterbrochen oder Gefahr besteht;RTW / NEF / FISU / HI;Electrocution/lightning;Power not disconnected or hazard present
+15D05;Stromunfall/Blitzschlag;Sturz aus extremer Höhe (>= 10m);RTW / NEF / FISU / OA / HI;Electrocution/lightning;Extreme fall (>= 10 m)
+15D06;Stromunfall/Blitzschlag;Sturz aus großer Höhe;RTW / NEF / FISU / HI / OA;Electrocution/lightning;Long fall
+15D07;Stromunfall/Blitzschlag;Bewusstseinstrübung;RTW;Electrocution/lightning;Not alert
+15D08;Stromunfall/Blitzschlag;Abnorme Atmung;RTW;Electrocution/lightning;Abnormal breathing
+15D09;Stromunfall/Blitzschlag;Unbekannter Zustand/Andere Codes nicht zutreffend;RTW;Electrocution/lightning;Unknown status/other codes not applicable
+15E00;Stromunfall/Blitzschlag;Aufwertung;RTW / NEF / FISU / HI;Electrocution/lightning;Override
+15E01;Stromunfall/Blitzschlag;Atemstillstand / Ineffektive Atmung;RTW / NEF / FISU / HI / AED;Electrocution/lightning;Respiratory arrest / ineffective breathing
+16A01;Augenprobleme/-verletzungen;Mäßige Augenverletzungen;NKT;Eye problems/injuries;Moderate eye injuries
+16A02;Augenprobleme/-verletzungen;Geringfügige Augenverletzungen;KTW;Eye problems/injuries;Minor eye injuries
+16A03;Augenprobleme/-verletzungen;Medizinische Ursache;ad 1450 (TEWEB) oder KTW;Eye problems/injuries;Medical cause
+16B00;Augenprobleme/-verletzungen;Aufwertung;RTW;Eye problems/injuries;Override
+16B01;Augenprobleme/-verletzungen;Schwere Augenverletzungen;RTW;Eye problems/injuries;Severe eye injuries
+16D00;Augenprobleme/-verletzungen;Aufwertung;RTW / NEF;Eye problems/injuries;Override
+16D01;Augenprobleme/-verletzungen;Bewusstseinstrübung;RTW;Eye problems/injuries;Not alert
+17A01;Sturz/Absturz;Ungefährliche Körperregion mit Fehlstellung;NKT;Falls;Not dangerous body area with deformity
+17A02;Sturz/Absturz;Ungefährliche Körperregion;KTW;Falls;Not dangerous body area
+17A03;Sturz/Absturz;Ältere (>= 6h) Verletzung (ohne Notfallleitsymptome);ad 1450 (TEWEB);Falls;Non-recent (>= 6h) injury (no priority symptoms)
+17A04;Sturz/Absturz;Allgemeine Hilfe (keine Verletzungen und keine Notfallleitsymptome);KTW;Falls;Public assist (no injuries and no priority symptoms)
+17B00;Sturz/Absturz;Aufwertung;RTW;Falls;Override
+17B01;Sturz/Absturz;Möglicherweise gefährliche Körperregion;NKT;Falls;POSSIBLY DANGEROUS body area
+17B02;Sturz/Absturz;Starke Blutung;NKT;Falls;Serious haemorrhage
+17B03;Sturz/Absturz;Treppe hinunterstürzen (nicht Sturz auf Treppe);NKT;Falls;Fall down stairs (not on stairs)
+17B04;Sturz/Absturz;Unbekannter Zustand/Andere Codes nicht zutreffend;NKT;Falls;Unknown status/other codes not applicable
+17D00;Sturz/Absturz;Aufwertung;RTW / NEF;Falls;Override
+17D01;Sturz/Absturz;Sturz aus extremer Höhe (>= 10m);RTW / NEF / FISU / OA / SEG-1;Falls;Extreme fall (>= 10 m)
+17D02;Sturz/Absturz;Kreislaufstillstand;RTW / NEF / FISU / OA / HI / AED;Falls;Cardiac arrest
+17D03;Sturz/Absturz;Bewusstlos;RTW / NEF / HI / AED;Falls;Unconscious
+17D04;Sturz/Absturz;Bewusstseinstrübung;RTW;Falls;Not alert
+17D05;Sturz/Absturz;Verletzungen im Brust- oder Halsbereich (mit Atembeschwerden);RTW;Falls;Chest or neck injuries (with difficulty breathing)
+17D06;Sturz/Absturz;Sturz aus großer Höhe (3-9m);RTW / NEF / FISU / OA;Falls;Long fall (3-9 m)
+18A01;Kopfschmerzen;Normale Atmung;ad 1450 (TEWEB);Headache;Normal breathing
+18B00;Kopfschmerzen;Aufwertung;NKT;Headache;Override
+18B01;Kopfschmerzen;Unbekannter Zustand/Andere Codes nicht zutreffend;NKT;Headache;Unknown status/other codes not applicable
+18C00;Kopfschmerzen;Aufwertung;RTW / NEF;Headache;Override
+18C01;Kopfschmerzen;Bewusstseinstrübung;RTW;Headache;Not alert
+18C02;Kopfschmerzen;Abnorme Atmung;RTW;Headache;Abnormal breathing
+18C03;Kopfschmerzen;Sprachstörungen;RTW;Headache;Speech problems
+18C04;Kopfschmerzen;Plötzliches Einsetzen von starken Schmerzen;RTW;Headache;Sudden onset of severe pain
+18C05;Kopfschmerzen;Taubheitsgefühl;RTW;Headache;Numbness
+18C06;Kopfschmerzen;Lähmungserscheinungen;RTW;Headache;Paralysis
+18C07;Kopfschmerzen;Verändertes Verhalten (<= 3h);RTW;Headache;Changed behaviour (<= 3h)
+19A01;Herzbeschwerden;Puls >= 50 und Puls < 130 (ohne Notfallleitsymptome);ad 1450 (TEWEB) oder KTW;Heart problems;Pulse >= 50 and < 130 (no priority symptoms)
+19A02;Herzbeschwerden;Brustschmerzen/Beschwerden in der Brust < 35 Jahre (ohne Notfallleitsymptome);KTW;Heart problems;Chest pain/discomfort < 35 years (no priority symptoms)
+19C00;Herzbeschwerden;Aufwertung;RTW;Heart problems;Override
+19C01;Herzbeschwerden;Implantierter Defibrillator (I.D.) löst aus;RTW / NEF;Heart problems;Implanted defibrillator (ICD) firing
+19C02;Herzbeschwerden;Abnorme Atmung;RTW;Heart problems;Abnormal breathing
+19C03;Herzbeschwerden;Brustschmerzen/Beschwerden in der Brust >= 35 Jahre;RTW;Heart problems;Chest pain/discomfort >= 35 years
+19C04;Herzbeschwerden;Bekanntes Herzleiden;RTW;Heart problems;Known heart condition
+19C05;Herzbeschwerden;Kokainmissbrauch;RTW;Heart problems;Cocaine abuse
+19C06;Herzbeschwerden;Puls = 130 (ohne Notfallleitsymptome);RTW;Heart problems;Pulse = 130 (no priority symptoms)
+19C07;Herzbeschwerden;Unbekannter Zustand/Andere Codes nicht zutreffend;RTW;Heart problems;Unknown status/other codes not applicable
+19D00;Herzbeschwerden;Aufwertung;RTW / NEF;Heart problems;Override
+19D01;Herzbeschwerden;Bewusstseinstrübung;RTW / NEF;Heart problems;Not alert
+19D02;Herzbeschwerden;SPRACHSCHWIERIGKEITEN ZWISCHEN ATEMZÜGEN;RTW / NEF;Heart problems;DIFFICULTY SPEAKING BETWEEN BREATHS
+19D03;Herzbeschwerden;VERÄNDERTE HAUTFARBE;RTW / NEF;Heart problems;CHANGE IN SKIN COLOUR
+19D04;Herzbeschwerden;Kaltschweißig;RTW / NEF;Heart problems;Clammy
+19D05;Herzbeschwerden;Soeben wiederbelebt und/oder defibrilliert (äußerlich);RTW / NEF / FISU;Heart problems;Just resuscitated and/or defibrillated (external)
+20A01;Hitze-/Kälteprobleme;Ansprechbar;ad 1450 (TEWEB);Heat/cold exposure;Responsive
+20B00;Hitze-/Kälteprobleme;Aufwertung;NKT;Heat/cold exposure;Override
+20B01;Hitze-/Kälteprobleme;Änderung der Hautfarbe;NKT;Heat/cold exposure;Change in skin colour
+20B02;Hitze-/Kälteprobleme;Unbekannter Zustand/Andere Codes nicht zutreffend;NKT;Heat/cold exposure;Unknown status/other codes not applicable
+20C00;Hitze-/Kälteprobleme;Aufwertung;RTW;Heat/cold exposure;Override
+20C01;Hitze-/Kälteprobleme;Herzinfarkt/Angina Pectoris-Vorgeschichte;RTW;Heat/cold exposure;History of heart attack/angina
+20D00;Hitze-/Kälteprobleme;Aufwertung;RTW / NEF;Heat/cold exposure;Override
+20D01;Hitze-/Kälteprobleme;Bewusstseinseintrübung;RTW;Heat/cold exposure;Not alert
+20D02;Hitze-/Kälteprobleme;Mehrere Verletzte (mit Notfallleitsymptomen);2 RTW / FISU;Heat/cold exposure;Multiple patients (with priority symptoms)
+21A01;Blutung;Ungefährliche Blutung;ad 1450 (TEWEB);Haemorrhage;Not dangerous haemorrhage
+21A02;Blutung;Schwache Blutung;ad 1450 (TEWEB);Haemorrhage;Minor haemorrhage
+21B00;Blutung;Aufwertung;NKT;Haemorrhage;Override
+21B01;Blutung;Möglicherweise gefährliche Blutung;RTW;Haemorrhage;Possibly dangerous haemorrhage
+21B02;Blutung;Starke Blutung;RTW;Haemorrhage;Serious haemorrhage
+21B03;Blutung;Bluter;RTW;Haemorrhage;Haemophiliac
+21B04;Blutung;Blutverdünnende Medikamente;RTW;Haemorrhage;Blood thinners
+21C00;Blutung;Aufwertung;RTW;Haemorrhage;Override
+21C01;Blutung;Blutung aus künstlichen Körperöffnungen;RTW;Haemorrhage;Bleeding from stoma
+21C02;Blutung;Blutung aus Dialyseshunt;RTW;Haemorrhage;Bleeding from dialysis fistula
+21C03;Blutung;Blutung aus Krampfadern;RTW;Haemorrhage;Bleeding from varicose veins
+21D00;Blutung;Aufwertung;RTW / NEF;Haemorrhage;Override
+21D01;Blutung;Kreislaufstillstand;RTW / NEF / FISU / AED / OA;Haemorrhage;Cardiac arrest
+21D02;Blutung;Bewusstlos;RTW / NEF / FISU;Haemorrhage;Unconscious
+21D03;Blutung;Bewusstseinstrübung;RTW;Haemorrhage;Not alert
+21D04;Blutung;Gefährliche Blutung;RTW;Haemorrhage;Dangerous haemorrhage
+21D05;Blutung;Abnorme Atmung;RTW;Haemorrhage;Abnormal breathing
+22A01;Unzugängliche/Verschüttete Person;Nicht mehr eingeklemmt (Keine Verletzungen);KTW;Inaccessible/entrapped person;No longer trapped (no injuries)
+22B00;Unzugängliche/Verschüttete Person;Aufwertung;RTW;Inaccessible/entrapped person;Override
+22B01;Unzugängliche/Verschüttete Person;Nicht mehr eingeklemmt (Unbekannte Verletzungen);NKT;Inaccessible/entrapped person;No longer trapped (unknown injuries)
+22B02;Unzugängliche/Verschüttete Person;Nur periphere Einklemmung;RTW;Inaccessible/entrapped person;Peripheral entrapment only
+22B03;Unzugängliche/Verschüttete Person;Unbekannter Zustand (Erkundung)/Andere Codes nicht zutreffend;RTW;Inaccessible/entrapped person;Unknown status (investigation)/other codes not applicable
+22D00;Unzugängliche/Verschüttete Person;Aufwertung;RTW / NEF / FISU;Inaccessible/entrapped person;Override
+22D01;Unzugängliche/Verschüttete Person;Mechanische oder maschinelle EINKLEMMUNG;RTW / NEF / FISU / SEG-1 / OA;Inaccessible/entrapped person;Mechanical or machinery ENTRAPMENT
+22D02;Unzugängliche/Verschüttete Person;Grabeneinsturz;RTW / NEF / FISU / SEG-1 / STEG / OA;Inaccessible/entrapped person;Trench collapse
+22D03;Unzugängliche/Verschüttete Person;Bauwerkseinsturz;RTW / NEF/ FISU / SEG / STEG / OA;Inaccessible/entrapped person;Structure collapse
+22D04;Unzugängliche/Verschüttete Person;Raumenge EINGESCHLOSSEN;RTW / SEG-1 / FISU / STEG / OA;Inaccessible/entrapped person;Confined space ENTRAPMENT
+22D05;Unzugängliche/Verschüttete Person;Unzugängliches Gelände;RTW / SEG-1 / FISU / STEG / OA;Inaccessible/entrapped person;Inaccessible terrain
+22D06;Unzugängliche/Verschüttete Person;Erdrutsch/Lawine;RTW / NEF / SEG-1 / FISU / STEG / OA;Inaccessible/entrapped person;Landslide/avalanche
+23O01;Überdosis/Vergiftung;VERGIFTUNG (ohne Notfallleitsymptome);ad 1450 (TEWEB) oder;Overdose/poisoning;POISONING (no priority symptoms)
+23B00;Überdosis/Vergiftung;Aufwertung;RTW;Overdose/poisoning;Override
+23B01;Überdosis/Vergiftung;ÜBERDOSIS (ohne Notfallleitsymptome);NKT oder RTW;Overdose/poisoning;OVERDOSE (no priority symptoms)
+23C00;Überdosis/Vergiftung;Aufwertung;RTW;Overdose/poisoning;Override
+23C01;Überdosis/Vergiftung;Bewusstseinstrübung;RTW;Overdose/poisoning;Not alert
+23C02;Überdosis/Vergiftung;Abnorme Atmung;RTW;Overdose/poisoning;Abnormal breathing
+23C03;Überdosis/Vergiftung;Antidepressiva (trizyklische);RTW;Overdose/poisoning;Antidepressants (tricyclic)
+23C04;Überdosis/Vergiftung;Kokain, Methamphetamine (oder Abkömmlinge);RTW;Overdose/poisoning;Cocaine, methamphetamine (or derivatives)
+23C05;Überdosis/Vergiftung;Narkotika/Opiate (Heroin,Morphin,Methadon,Oxycodon,usw.);RTW;Overdose/poisoning;Narcotics/opiates (heroin, morphine, methadone, oxycodone, etc.)
+23C06;Überdosis/Vergiftung;Säuren oder Laugen;RTW;Overdose/poisoning;Acids or alkalis
+23C07;Überdosis/Vergiftung;Unbekannter Zustand/Andere Codes nicht zutreffend;RTW;Overdose/poisoning;Unknown status/other codes not applicable
+23C08;Überdosis/Vergiftung;Empfehlung der VIZ;RTW;Overdose/poisoning;Poison control recommendation
+23D00;Überdosis/Vergiftung;Aufwertung;RTW / NEF / HI;Overdose/poisoning;Override
+23D01;Überdosis/Vergiftung;Kreislaufstillstand;RTW / NEF / FISU / HI / AED;Overdose/poisoning;Cardiac arrest
+23D02;Überdosis/Vergiftung;Bewusstlos;RTW / HI;Overdose/poisoning;Unconscious
+23D03;Überdosis/Vergiftung;Veränderte Hautfarbe;RTW / HI;Overdose/poisoning;CHANGE IN SKIN COLOUR
+23E00;Überdosis/Vergiftung;Aufwertung;RTW / NEF / FISU;Overdose/poisoning;Override
+23E01;Überdosis/Vergiftung;Kreislaufstillstand aufgrund von Narkotika/Opioiden (offensichtlich);RTW / NEF / FISU / A;Overdose/poisoning;Cardiac arrest due to narcotics/opioids (obvious)
+24O01;Schwangerschaft;Fruchtwasserabgang (keine Wehen/sichtbare Körperteile des Babys);KTW;Pregnancy;Waters broken (no contractions/no baby parts visible)
+24A00;Schwangerschaft;Aufwertung;KTW;Pregnancy;Override
+24A01;Schwangerschaft;Blutungen oder Fehlgeburt im 1. Trimester;KTW;Pregnancy;Bleeding or miscarriage in 1st trimester
+24A02;Schwangerschaft;Situation mit einer bestätigten TOTGEBURT;KTW;Pregnancy;Confirmed STILLBIRTH
+24B00;Schwangerschaft;Aufwertung;RTW;Pregnancy;Override
+24B01;Schwangerschaft;Wehen (keine unmittelbar bevorstehende Geburt, >= 6 Monate/24 Wochen);KTW;Pregnancy;Labour (delivery not imminent, >= 6 months/24 weeks)
+24B02;Schwangerschaft;Unbekannter Zustand/Andere Codes nicht zutreffend;KTW;Pregnancy;Unknown status/other codes not applicable
+24C00;Schwangerschaft;Aufwertung;RTW;Pregnancy;Override
+24C01;Schwangerschaft;Blutungen oder Fehlgeburt im 2. Trimester;RTW;Pregnancy;Bleeding or miscarriage in 2nd trimester
+24C02;Schwangerschaft;Starke Blutung im 1. Trimester;RTW;Pregnancy;Serious haemorrhage in 1st trimester
+24C03;Schwangerschaft;Bauchschmerzen/-krämpfe (< 6 Monate/24 Wochen und kein Fötus oder Gewebe);RTW;Pregnancy;Abdominal pain/cramping (< 6 months/24 weeks, no fetus or tissue)
+24C04;Schwangerschaft;Baby ist geboren (keine Komplikationen);RTW;Pregnancy;Baby born (no complications)
+24D00;Schwangerschaft;Aufwertung;RTW / NEF / OA;Pregnancy;Override
+24D01;Schwangerschaft;Fehllage oder Nabelschnurvorfall;RTW / NEF / OA;Pregnancy;Breech or cord presentation
+24D02;Schwangerschaft;Kopf sichtbar/geboren;RTW;Pregnancy;Head visible/born
+24D03;Schwangerschaft;Unmittelbar bevorstehende Geburt (>= 6 Monate/24 Wochen);NKT;Pregnancy;Imminent delivery (>= 6 months/24 weeks)
+24D04;Schwangerschaft;Blutungen im 3. TRIMESTER;RTW;Pregnancy;Bleeding in 3rd TRIMESTER
+24D05;Schwangerschaft;Erwartete Komplikationen;RTW;Pregnancy;Expected complications
+24D06;Schwangerschaft;Baby ist geboren (Komplikationen beim Baby);RTW / NEF / OA;Pregnancy;Baby born (complications with baby)
+24D07;Schwangerschaft;Baby ist geboren (Komplikationen bei der Mutter);RTW / NEF / OA;Pregnancy;Baby born (complications with mother)
+24D08;Schwangerschaft;Fehlgeburt mit Lebenszeichen;RTW / NEF / OA;Pregnancy;Miscarriage with signs of life
+25O01;Psychiatrie;Nicht suizidgefährdet und wach (Vorgeschichte Psychische Erkrankung);ad 1450 (TEWEB);Psychiatric;Non-suicidal and alert (history of mental illness)
+25O02;Psychiatrie;Suizidgedanken und wach (Vorgeschichte Psychische Erkrankung);KTW;Psychiatric;Suicidal and alert (history of mental illness)
+25A00;Psychiatrie;Aufwertung;KTW;Psychiatric;Override
+25A01;Psychiatrie;Nicht suizidgefährdet und wach;ad 1450 (TEWEB);Psychiatric;Non-suicidal and alert
+25A02;Psychiatrie;SUIZIDGEDANKEN und wach;KTW;Psychiatric;SUICIDAL and alert
+25A03;Psychiatrie;SUIZIDGEDANKEN und wach (Einnahme von Medikamenten/Substanzen);KTW;Psychiatric;SUICIDAL and alert (ingestion of medication/substances)
+25B00;Psychiatrie;Aufwertung;NKT;Psychiatric;Override
+25B01;Psychiatrie;STARKE Blutung;NKT;Psychiatric;Serious haemorrhage
+25B02;Psychiatrie;Nicht STARKE oder SCHWACHE Blutung;NKT;Psychiatric;Not SERIOUS or MINOR haemorrhage
+25B03;Psychiatrie;SELBSTMORDABSICHT;NKT;Psychiatric;SUICIDE ATTEMPT
+25B04;Psychiatrie;Person droht zu springen;RTW / STEG / HI;Psychiatric;Person threatening to jump
+25B05;Psychiatrie;Beinahe-Erhängen, -Strangulierung od. -Ersticken ohne äußere Einflüsse (wach ohne Atembeschwerden);NKT;Psychiatric;Near hanging, strangulation or suffocation, no external cause (alert without difficulty breathing)
+25B06;Psychiatrie;Unbekannter Zustand/Andere Codes nicht zutreffend;NKT;Psychiatric;Unknown status/other codes not applicable
+25C00;Psychiatrie;Aufwertung;RTW;Psychiatric;Override
+25C01;Psychiatrie;VERÄNDERTE BEWUSSTSEINSLAGE (Vorgeschichte PSYCHISCHER ERKRANKUNGEN);RTW;Psychiatric;ALTERED LEVEL OF CONSCIOUSNESS (history of MENTAL ILLNESS)
+25C02;Psychiatrie;VERÄNDERTE BEWUSSTSEINSLAGE (keine oder unbekannte Vorgeschichte PSYCHISCHER ERKRANKUNGEN);RTW;Psychiatric;ALTERED LEVEL OF CONSCIOUSNESS (no or unknown history of MENTAL ILLNESS)
+25C03;Psychiatrie;VERÄNDERTE BEWUSSTSEINSLAGE (Einnahme von Medikamenten/Substanzen);RTW;Psychiatric;ALTERED LEVEL OF CONSCIOUSNESS (ingestion of medication/substances)
+25C04;Psychiatrie;VERÄNDERTE BEWUSSTSEINSLAGE (plötzliche Veränderung des Verhaltens/der Persönlichkeit);RTW;Psychiatric;ALTERED LEVEL OF CONSCIOUSNESS (sudden change in behaviour/personality)
+25D00;Psychiatrie;Aufwertung;RTW / NEF;Psychiatric;Override
+25D01;Psychiatrie;Kreislaufstillstand;RTW / NEF / FISU / A;Psychiatric;Cardiac arrest
+25D02;Psychiatrie;Bewusstlos;RTW;Psychiatric;Unconscious
+25D03;Psychiatrie;Bewusstseinstrübung;NKT;Psychiatric;Not alert
+25D04;Psychiatrie;Gefährliche Blutung;RTW;Psychiatric;Dangerous haemorrhage
+25D05;Psychiatrie;Beinahe Erhängen, -Strangulierung od. -Ersticken ohne äußere Einflüsse (wach mit Atembeschw.);RTW / HI;Psychiatric;Near hanging, strangulation or suffocation, no external cause (alert with difficulty breathing)
+25D06;Psychiatrie;Gerade gesprungen;RTW / NEF / FISU / OA;Psychiatric;Just jumped
+26O02;Kranke Person;Furunkel;ad 1450 (TEWEB);Sick person;Boils
+26O03;Kranke Person;Beulen (nicht traumatisch);ad 1450 (TEWEB);Sick person;Lumps (non-traumatic)
+26O04;Kranke Person;Schlafstörungen;ad 1450 (TEWEB);Sick person;Sleeping problems
+26O05;Kranke Person;Kann keinen Urin lassen (ohne Bauchschmerzen);ad 1450 (TEWEB);Sick person;Unable to urinate (no abdominal pain)
+26O06;Kranke Person;Harnkatheter (liegend/entfernt ohne Blutung);ad 1450 (TEWEB) oder KTW;Sick person;Urinary catheter (in place/removed, no bleeding)
+26O07;Kranke Person;Verstopfung;ad 1450 (TEWEB);Sick person;Constipation
+26O08;Kranke Person;Krämpfe/Spasmen/Gelenkschmerzen (unterhalb Schulter/Hüfte und kein Trauma);ad 1450 (TEWEB) oder KTW;Sick person;Cramps/spasms/joint pain (below shoulder/hip, no trauma)
+26O09;Kranke Person;Festsitzende Fingerringe;ad 1450 (TEWEB);Sick person;Stuck finger ring
+26O10;Kranke Person;Taubheit/Schwerhörigkeit;ad 1450 (TEWEB);Sick person;Deafness/hearing loss
+26O11;Kranke Person;Stuhlabgang;ad 1450 (TEWEB);Sick person;Bowel movement
+26O12;Kranke Person;Ohrenschmerzen;ad 1450 (TEWEB);Sick person;Earache
+26O13;Kranke Person;Darmeinlauf;ad 1450 (TEWEB);Sick person;Enema
+26O14;Kranke Person;Gicht;ad 1450 (TEWEB);Sick person;Gout
+26O15;Kranke Person;Hämorrhoiden;ad 1450 (TEWEB);Sick person;Haemorrhoids
+26O16;Kranke Person;Hepatitis;ad 1450 (TEWEB);Sick person;Hepatitis
+26O17;Kranke Person;Schluckauf;ad 1450 (TEWEB);Sick person;Hiccups
+26O18;Kranke Person;Juckreiz;ad 1450 (TEWEB);Sick person;Itching
+26O19;Kranke Person;Nervosität;ad 1450 (TEWEB);Sick person;Nervousness
+26O20;Kranke Person;Objekt steckt in (Nase, Ohr, Vagina, Rektum, Penis);ad 1450 (TEWEB) oder KTW;Sick person;Object stuck (nose, ear, vagina, rectum, penis)
+26O21;Kranke Person;Verschlucktes Objekt (ohne Erstickungsanfall und ohne Atembeschwerden, kann sprechen);ad 1450 (TEWEB) oder KTW;Sick person;Swallowed object (not choking, no difficulty breathing, can talk)
+26O22;Kranke Person;Schmerzhaftes Wasserlassen;ad 1450 (TEWEB);Sick person;Painful urination
+26O23;Kranke Person;Penisprobleme/Schmerzen;ad 1450 (TEWEB);Sick person;Penis problems/pain
+26O24;Kranke Person;Ausschlag/Hautveränderung (ohne Atem- oder Schluckbeschwerden);ad 1450 (TEWEB);Sick person;Rash/skin disorder (no difficulty breathing or swallowing)
+26O25;Kranke Person;Durch Geschlechtsverkehr übertragene Krankheit;ad 1450 (TEWEB);Sick person;Sexually transmitted disease
+26O26;Kranke Person;Halsentzündung (ohne Atem- oder Schluckbeschwerden);ad 1450 (TEWEB);Sick person;Sore throat (no difficulty breathing or swallowing)
+26O27;Kranke Person;Zahnschmerzen (ohne Kieferschmerzen);ad 1450 (TEWEB);Sick person;Toothache (no jaw pain)
+26O28;Kranke Person;Infizierte Wunde (örtlich oder oberflächlich);ad 1450 (TEWEB);Sick person;Infected wound (local or superficial)
+26A00;Kranke Person;Aufwertung;KTW;Sick person;Override
+26A01;Kranke Person;Keine Notfallleitsymptome (Beschwerden 2-11 nicht zu erkennen);ad 1450 (TEWEB);Sick person;No priority symptoms (complaints 2-11 not identified)
+26A02;Kranke Person;Blutdruckprobleme (ohne Symptome);ad 1450 (TEWEB) oder KTW;Sick person;Blood pressure problems (no symptoms)
+26A03;Kranke Person;Schwindel/Drehschwindel;ad 1450 (TEWEB) oder KTW;Sick person;Dizziness/vertigo
+26A04;Kranke Person;Fieber/Schüttelfrost;ad 1450 (TEWEB) oder KTW;Sick person;Fever/chills
+26A05;Kranke Person;Reduzierter Allgemeinzustand;ad 1450 (TEWEB) oder KTW;Sick person;Reduced general condition
+26A06;Kranke Person;Übelkeit;ad 1450 (TEWEB);Sick person;Nausea
+26A07;Kranke Person;Akute Unbeweglichkeit (Schwäche);ad 1450 (TEWEB) oder KTW;Sick person;Sudden immobility (weakness)
+26A08;Kranke Person;Andere Schmerzen;ad 1450 (TEWEB) oder KTW;Sick person;Other pain
+26A09;Kranke Person;Nur Transportanforderung;KTW;Sick person;Transport request only
+26A10;Kranke Person;Schlecht/Krank;ad 1450 (TEWEB) oder KTW;Sick person;Feeling unwell/ill
+26A11;Kranke Person;Erbrechen;ad 1450 (TEWEB) oder KTW;Sick person;Vomiting
+26A12;Kranke Person;Verdacht auf Meningitis;NKT;Sick person;Suspected meningitis
+26B00;Kranke Person;Aufwertung;RTW;Sick person;Override
+26B01;Kranke Person;Unbekannter Zustand/Andere Codes nicht zutreffend;RTW;Sick person;Unknown status/other codes not applicable
+26C00;Kranke Person;Aufwertung;RTW;Sick person;Override
+26C01;Kranke Person;Veränderte Bewusstseinslage;RTW;Sick person;Altered level of consciousness
+26C02;Kranke Person;Abnorme Atmung;RTW;Sick person;Abnormal breathing
+26C03;Kranke Person;Sichelzellenanämie/Thalassämie;KTW;Sick person;Sickle cell crisis/thalassaemia
+26C04;Kranke Person;Autonome Dysreflexie/Hyperreflexie;KTW;Sick person;Autonomic dysreflexia/hyperreflexia
+26C05;Kranke Person;Akute Nebenniereninsuffizienz/-krise oder Morbus Addison;KTW;Sick person;Acute adrenal insufficiency/crisis or Addison's disease
+26D00;Kranke Person;Aufwertung;RTW / NEF;Sick person;Override
+26D01;Kranke Person;Bewusstseinstrübung;RTW;Sick person;Not alert
+27A01;Stich-/Schuss-/Pfählungsverletzung;Ältere (>= 6h) periphere Wunde (ohne Notfallleitsymptome);KTW;Stab/gunshot/penetrating trauma;Non-recent (>= 6h) peripheral wound (no priority symptoms)
+27B00;Stich-/Schuss-/Pfählungsverletzung;Aufwertung;RTW;Stab/gunshot/penetrating trauma;Override
+27B01;Stich-/Schuss-/Pfählungsverletzung;Einzelne ältere (>= 6h) zentrale Wunde;RTW;Stab/gunshot/penetrating trauma;Single non-recent (>= 6h) central wound
+27B02;Stich-/Schuss-/Pfählungsverletzung;Einzelne bekannte periphere Wunde;RTW;Stab/gunshot/penetrating trauma;Single known peripheral wound
+27B03;Stich-/Schuss-/Pfählungsverletzung;Starke Blutung;RTW;Stab/gunshot/penetrating trauma;Serious haemorrhage
+27B04;Stich-/Schuss-/Pfählungsverletzung;Unbekannter Zustand/Andere Codes nicht zutreffend;RTW;Stab/gunshot/penetrating trauma;Unknown status/other codes not applicable
+27B05;Stich-/Schuss-/Pfählungsverletzung;Offensichtlich tote Person;NEF;Stab/gunshot/penetrating trauma;Obviously dead person
+27D00;Stich-/Schuss-/Pfählungsverletzung;Aufwertung;RTW / NEF / FISU / OA;Stab/gunshot/penetrating trauma;Override
+27D01;Stich-/Schuss-/Pfählungsverletzung;Kreislaufstillstand;RTW / NEF / FISU / AED / OA;Stab/gunshot/penetrating trauma;Cardiac arrest
+27D02;Stich-/Schuss-/Pfählungsverletzung;Bewusstlos;RTW / NEF / FISU / OA;Stab/gunshot/penetrating trauma;Unconscious
+27D03;Stich-/Schuss-/Pfählungsverletzung;Bewusstseinstrübung;RTW / NEF / FISU / OA;Stab/gunshot/penetrating trauma;Not alert
+27D04;Stich-/Schuss-/Pfählungsverletzung;Zentrale Wunden;RTW / NEF / FISU / OA;Stab/gunshot/penetrating trauma;Central wounds
+27D05;Stich-/Schuss-/Pfählungsverletzung;Mehrere Wunden;RTW / FISU;Stab/gunshot/penetrating trauma;Multiple wounds
+27D06;Stich-/Schuss-/Pfählungsverletzung;Mehrere Verletzte;2 RTW / SEG-1 / FISU / OA;Stab/gunshot/penetrating trauma;Multiple patients
+28A01;Schlaganfall;Normale Atmung < 35 Jahre;NKT;Stroke;Normal breathing < 35 years
+28C00;Schlaganfall;Aufwertung;RTW;Stroke;Override
+28C01;Schlaganfall;Bewusstseinstrübung;RTW;Stroke;Not alert
+28C02;Schlaganfall;Abnorme Atmung;RTW;Stroke;Abnormal breathing
+28C03;Schlaganfall;Plötzliche Sprachstörungen;RTW;Stroke;Sudden speech problems
+28C04;Schlaganfall;Plötzlich aufgetretene Schwäche oder Taubheitsgefühl (auf einer Seite);RTW;Stroke;Sudden weakness or numbness (one side)
+28C05;Schlaganfall;Plötzlich aufgetretene Lähmungserscheinungen oder hängende Gesichtshälfte (auf einer Seite);RTW;Stroke;Sudden paralysis or facial droop (one side)
+28C06;Schlaganfall;Plötzlich aufgetretener Verlust des Gleichgewichts oder der Koordination;RTW;Stroke;Sudden loss of balance or coordination
+28C07;Schlaganfall;Plötzliche Sehstörungen;RTW;Stroke;Sudden vision problems
+28C08;Schlaganfall;Plötzlicher Beginn starker Kopfschmerzen;RTW;Stroke;Sudden onset of severe headache
+28C09;Schlaganfall;SCHLAGANFALL-Vorgeschichte;RTW;Stroke;History of STROKE
+28C10;Schlaganfall;TIA -(Mini-Schlaganfall-) Vorgeschichte;RTW;Stroke;History of TIA (mini-stroke)
+28C11;Schlaganfall;Normale Atmung >= 35 Jahre;RTW;Stroke;Normal breathing >= 35 years
+28C12;Schlaganfall;Unbekannter Zustand/Andere Codes nicht zutreffend;RTW;Stroke;Unknown status/other codes not applicable
+29O01;Verkehrsunfall;Keine Verletzungen (bestätigt bis zu 4 Personen);KTW;Traffic accident;No injuries (confirmed, up to 4 people)
+29A00;Verkehrsunfall;Aufwertung;KTW;Traffic accident;Override
+29A01;Verkehrsunfall;Anrufer 1. Hand mit Verletzung in einer ungefährlichen Körperregion;NKT;Traffic accident;First-party caller with injury to a not dangerous body area
+29A02;Verkehrsunfall;Keine Verletzen gemeldet (unbestätigt oder >= 5 Personen beteiligt);2 KTW;Traffic accident;No injuries reported (unconfirmed or >= 5 people involved)
+29B00;Verkehrsunfall;Aufwertung;RTW;Traffic accident;Override
+29B01;Verkehrsunfall;Verletzungen;RTW;Traffic accident;Injuries
+29B02;Verkehrsunfall;Starke Blutungen;NKT oder RTW;Traffic accident;Serious haemorrhage
+29B03;Verkehrsunfall;Andere Gefahren;RTW;Traffic accident;Other hazards
+29B04;Verkehrsunfall;Geringer Unfallmechanismus (Anrufer 1. oder 2. Hand);RTW;Traffic accident;Minor mechanism of injury (first- or second-party caller)
+29B05;Verkehrsunfall;Unbekannter Zustand/Andere Codes nicht zutreffend;RTW;Traffic accident;Unknown status/other codes not applicable
+29D00;Verkehrsunfall;Aufwertung;2 RTW / NEF;Traffic accident;Override
+29D01;Verkehrsunfall;GRÖßERES EREIGNIS (a bis h);SEG / RTW / NEF / FISU / OA;Traffic accident;MAJOR INCIDENT (a to h)
+29D02;Verkehrsunfall;GEFÄHRLICHER UNFALLMECHANISMUS (k bis T);RTW / NEF / SEG-1 /;Traffic accident;DANGEROUS MECHANISM OF INJURY (k to T)
+29D03;Verkehrsunfall;Aufprall mit hoher Geschwindigkeit;RTW / FISU;Traffic accident;High velocity impact
+29D04;Verkehrsunfall;Gefahrgut;RTW / NEF / FISU / SEG-1 / ABC / OA;Traffic accident;Hazardous materials
+29D05;Verkehrsunfall;Eingeklemmte Person;RTW / NEF / FISU;Traffic accident;Trapped person
+29D06;Verkehrsunfall;Kreislaufstillstand;RTW / NEF / FISU / AED / OA;Traffic accident;Cardiac arrest
+29D07;Verkehrsunfall;Bewusstlos;RTW / NEF / FISU;Traffic accident;Unconscious
+29D08;Verkehrsunfall;Bewusstseinstrübung mit auffälliger Atmung (abnormal);RTW / NEF / FISU;Traffic accident;Not alert with abnormal breathing
+29D09;Verkehrsunfall;Bewusstseinseintrübung mit normaler Atmung;RTW / FISU;Traffic accident;Not alert with normal breathing
+30A01;Verletzungen;Markierte(*) ungefährliche Körperregion mit Fehlstellung;NKT;Traumatic injuries;Marked (*) not dangerous body area with deformity
+30A02;Verletzungen;Ungefährliche Körperregion;KTW;Traumatic injuries;Not dangerous body area
+30A03;Verletzungen;Ältere (>= 6h) Verletzung (ohne Notfallleitsymptome);KTW;Traumatic injuries;Non-recent (>= 6h) injury (no priority symptoms)
+30B00;Verletzungen;Aufwertung;RTW;Traumatic injuries;Override
+30B01;Verletzungen;Möglicherweise gefährliche Körperregion;NKT;Traumatic injuries;POSSIBLY DANGEROUS body area
+30B02;Verletzungen;Starke Blutung;RTW;Traumatic injuries;Serious haemorrhage
+30B03;Verletzungen;Unbekannte Körperregion (Anrufer nicht bei Patient);RTW;Traumatic injuries;Unknown body area (caller not with patient)
+30D00;Verletzungen;Aufwertung;RTW / NEF;Traumatic injuries;Override
+30D01;Verletzungen;Kreislaufstillstand;RTW / NEF / FISU / AED / OA;Traumatic injuries;Cardiac arrest
+30D02;Verletzungen;Bewusstlos;RTW / NEF;Traumatic injuries;Unconscious
+30D03;Verletzungen;Bewusstseinstrübung;RTW;Traumatic injuries;Not alert
+30D04;Verletzungen;Verletzungen im Brust- oder Halsbereich (mit Atembeschwerden);RTW;Traumatic injuries;Chest or neck injuries (with difficulty breathing)
+30D05;Verletzungen;Aufprall mit hoher Geschwindigkeit / Massive Krafteinwirkung;RTW / FISU;Traumatic injuries;High velocity impact / major incident
+31A01;Bewusstlosigkeit/Ohnmacht (Beinahe-);Ohnmachtsanfall/-anfälle und ansprechbar >= 35 Jahre (ohne bekanntes Herzleiden);KTW;Unconscious/fainting (near);Fainting episode(s), now responsive >= 35 years (no known heart condition)
+31A02;Bewusstlosigkeit/Ohnmacht (Beinahe-);Ohnmachtsanfall/-anfälle und ansprechbar < 35 Jahre (mit bekanntem Herzleiden);NKT;Unconscious/fainting (near);Fainting episode(s), now responsive < 35 years (with known heart condition)
+31A03;Bewusstlosigkeit/Ohnmacht (Beinahe-);Ohnmachtsanfall/-anfälle und ansprechbar < 35 Jahre (ohne bekannten Herzleiden);ad 1450 (TEWEB) oder KTW;Unconscious/fainting (near);Fainting episode(s), now responsive < 35 years (no known heart condition)
+31C00;Bewusstlosigkeit/Ohnmacht (Beinahe-);Aufwertung;RTW;Unconscious/fainting (near);Override
+31C01;Bewusstlosigkeit/Ohnmacht (Beinahe-);Ansprechbar mit abnormer Atmung;RTW;Unconscious/fainting (near);Responsive with abnormal breathing
+31C02;Bewusstlosigkeit/Ohnmacht (Beinahe-);Ohnmachtsanfall/-anfälle und ansprechbar >= 35 Jahre (mit bekanntem Herzleiden);RTW;Unconscious/fainting (near);Fainting episode(s), now responsive >= 35 years (with known heart condition)
+31C03;Bewusstlosigkeit/Ohnmacht (Beinahe-);Frauen 12-50 Jahre mit Bauchschmerzen;RTW;Unconscious/fainting (near);Females 12-50 years with abdominal pain
+31D00;Bewusstlosigkeit/Ohnmacht (Beinahe-);Aufwertung;RTW / NEF;Unconscious/fainting (near);Override
+31D01;Bewusstlosigkeit/Ohnmacht (Beinahe-);AGONALE/INEFFEKTIVE ATMUNG;RTW / NEF / FISU / AED;Unconscious/fainting (near);AGONAL/INEFFECTIVE BREATHING
+31D02;Bewusstlosigkeit/Ohnmacht (Beinahe-);Abnorme Atmung;RTW;Unconscious/fainting (near);Abnormal breathing
+31D03;Bewusstlosigkeit/Ohnmacht (Beinahe-);Effektive Atmung;RTW;Unconscious/fainting (near);Effective breathing
+31D04;Bewusstlosigkeit/Ohnmacht (Beinahe-);Bewusstseinstrübung;RTW;Unconscious/fainting (near);Not alert
+31D05;Bewusstlosigkeit/Ohnmacht (Beinahe-);Veränderte Hautfarbe;RTW;Unconscious/fainting (near);CHANGE IN SKIN COLOUR
+31E00;Bewusstlosigkeit/Ohnmacht (Beinahe-);Aufwertung;RTW / NEF / FISU / AED;Unconscious/fainting (near);Override
+31E01;Bewusstlosigkeit/Ohnmacht (Beinahe-);Ineffektive Atmung;RTW / NEF / FISU / AED;Unconscious/fainting (near);INEFFECTIVE BREATHING
+32B01;Unklares Geschehen;Stehen, sitzen, sich bewegen oder sprechen;RTW;Unknown problem;Standing, sitting, moving or talking
+32B02;Unklares Geschehen;Medizinische Notfallmeldung durch Notrufsystem (keine Patienteninformation);RTW;Unknown problem;Medical alarm from emergency call system (no patient information)
+32B03;Unklares Geschehen;Unbekannter Zustand/Andere Codes nicht zutreffend;RTW;Unknown problem;Unknown status/other codes not applicable
+32B04;Unklares Geschehen;Fremdsprachiger Anrufer wurde nicht verstanden (kein Dolmetscher in der Leitstelle);RTW;Unknown problem;Foreign-language caller not understood (no interpreter in dispatch)
+32D00;Unklares Geschehen;Aufwertung;RTW / NEF;Unknown problem;Override
+32D01;Unklares Geschehen;Fragliche Lebensbedrohung;RTW / NEF;Unknown problem;Possible threat to life
+33A01;Transportanforderung;KTW Anforderung;KTW;Transport request;Patient transport request
+33B01;Transportanforderung;N-KTW Anforderung;NKT;Transport request;Emergency patient transport request
+33C00;Transportanforderung;Aufwertung;RTW / NEF;Transport request;Override
+33C01;Transportanforderung;Bewusstseinstrübung (akut eingetreten);RTW;Transport request;Not alert (sudden onset)
+33C02;Transportanforderung;Abnorme Atmung (akut aufgetreten);RTW / NEF;Transport request;Abnormal breathing (sudden onset)
+33C03;Transportanforderung;Massive Blutung;RTW / NEF;Transport request;Massive haemorrhage
+33C04;Transportanforderung;Schock;RTW / NEF;Transport request;Shock
+33C05;Transportanforderung;Mögliche akute Herzbeschwerden (V.a. Herzinfarkt);RTW;Transport request;Possible acute heart problems (suspected heart attack)
+33C06;Transportanforderung;Starke Schmerzen;RTW;Transport request;Severe pain
+33C07;Transportanforderung;Notarztbegleitung erforderlich / NA-Anforderung durch 141;RTW / NEF;Transport request;Emergency doctor escort required / doctor requested by on-call physician
+33D00;Transportanforderung;Aufwertung;RTW / NEF;Transport request;Override
+33D01;Transportanforderung;Atem- oder Kreislaufstillstand vermutet;RTW / NEF / FISU;Transport request;Respiratory or cardiac arrest suspected
+33D02;Transportanforderung;Soeben wiederbelebt und/oder defibrilliert (äußerlich);RTW / NEF / FISU;Transport request;Just resuscitated and/or defibrillated (external)
+37A02;Untersuchung/Transport;Transfer KTW;KTW;Examination/transport;Transfer patient transport
+37B02;Untersuchung/Transport;Transfer Neugeborene;AIT;Examination/transport;Transfer newborn
+37C05;Untersuchung/Transport;Transfer NEF-RTW (Notarztbegleitung erforderlich);RTW / NEF;Examination/transport;Transfer doctor + ambulance (doctor escort required)
+37C07;Untersuchung/Transport;Transfer RTW;AIT;Examination/transport;Transfer ambulance
+37C08;Untersuchung/Transport;Transfer BIT;BIT;Examination/transport;Transfer infection transport
+37C09;Untersuchung/Transport;Transfer NAH;NAH;Examination/transport;Transfer air ambulance
+37D03;Untersuchung/Transport;Dringend (Vitale Indikation);RTW / NEF;Examination/transport;Urgent (life-threatening)
+42A01;Nachforderung;KTW-Nachforderung durch Notarzt;KTW;Backup request;Patient transport requested by emergency doctor
+42A02;Nachforderung;KTW/RTW fordert weiteres Fzg an;KTW oder RTW;Backup request;Transport unit/ambulance requests another vehicle
+42B01;Nachforderung;RTW-Nachforderung durch Notarzt;RTW;Backup request;Ambulance requested by emergency doctor
+42B02;Nachforderung;BIT-Nachforderung (durch Fzg bei Primäreinsätzen);BIT;Backup request;Infection transport backup (requested by unit on scene)
+42B03;Nachforderung;STEG-Nachforderung;STEG;Backup request;STEG backup request
+42B04;Nachforderung;ABC-Nachforderung;ABC;Backup request;CBRN backup request
+42B05;Nachforderung;HIO-Nachforderung;SEG-1;Backup request;HIO backup request
+42C01;Nachforderung;Notarztintervention erforderlich;NEF;Backup request;Emergency doctor intervention required
+42C02;Nachforderung;NAH-Anforderung Wien;NAH;Backup request;Air ambulance request (city)
+42C03;Nachforderung;NAH-Anforderung anderes Bundesland;NAH;Backup request;Air ambulance request from another state
+42C04;Nachforderung;Nachforderung Field Supervisor Versorgungsunterstützung;FISU;Backup request;Field supervisor backup for patient care
+42D01;Nachforderung;Patient in Lebensgefahr / kritisch;NEF / FISU;Backup request;Patient in danger of life / critical
+42D02;Nachforderung;Nachforderung Oberärzt*in;NEF / OA;Backup request;Senior physician backup request
