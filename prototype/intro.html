@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Realistic EMS Intro</title>
+<style>
+:root{--bg:#0f1520;--card:#182131;--ink:#e8eef7;--mute:#8fa0b8;--line:#2a374d;--g:16px;--acc:#3ea6ff;--red:#ff4d4d;--ok:#4ade80}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 50% 0,#1b2a44,var(--bg));color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+.app{width:min(720px,100%);padding:16px}
+.card{position:relative;display:flex;flex-direction:column;height:min(880px,96vh);background:radial-gradient(circle at 0 0,#2a7bff66,transparent 60%),radial-gradient(circle at 100% 100%,#ff404066,transparent 60%),var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 20px 60px #0008}
+/* Apple-style continuous corners (squircle). Chrome/Edge 139+, Safari/Firefox fall back to plain rounding. */
+@supports (corner-shape:squircle){
+  .card{corner-shape:squircle;border-radius:56px}
+  .seg button,pre,.lbox{corner-shape:squircle}
+  .lbox{border-radius:40px}
+  .panel,.panel::after{corner-shape:squircle;border-radius:40px}
+  .bars i{corner-shape:squircle}
+  pre{border-radius:20px}
+}
+.top{flex:none;display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:20px 24px 4px;color:var(--mute);font-size:14px}
+.dots{flex:none;display:flex;justify-content:center;gap:6px;padding:0 24px 20px}.dots i{width:28px;height:4px;border-radius:2px;background:var(--line);transition:.3s}.dots i.on{background:var(--acc)}
+.lang button{background:none;border:1px solid var(--line);color:var(--mute);border-radius:6px;padding:2px 8px;cursor:pointer}
+.lang button.on{color:var(--ink);border-color:var(--acc)}
+
+
+.lower{flex:1;min-height:0;display:flex;flex-direction:column}
+.body{flex:1;overflow:auto;padding:8px 24px 0;animation:in .4s both}
+@keyframes in{from{opacity:0;transform:translateY(10px)}}
+.top{position:relative}.corner{position:absolute;right:24px;top:20px;display:flex;gap:10px;align-items:center}
+#skip{font:inherit;font-size:14px;background:none;border:1px solid var(--line);color:var(--mute);border-radius:6px;padding:2px 10px;cursor:pointer}#skip:hover{border-color:var(--acc);color:var(--ink)}
+.top>div:first-child{height:88px;flex:1;padding-right:190px}
+.top.welcome>div:first-child{padding:0;display:flex;align-items:center;justify-content:center;text-align:center}
+.top.welcome h2{font-size:40px}.top.intro h2{font-size:60px;letter-spacing:.02em}
+/* language screen: no panels, heading + boxes centred in the popup (stage stays in the DOM, hidden, so its geometry still initialises) */
+.card.intro .stage{position:absolute;inset:0;visibility:hidden;pointer-events:none}
+.card.intro .top{flex:1;align-items:flex-end;padding-bottom:24px}
+.card.intro .top>div:first-child{height:auto}
+/* welcome screen has no options: panels grow into the space */
+.card.bare .lower{flex:none}.card.bare .stage{flex:1}
+.langs{display:flex;gap:var(--g);padding-top:8px}
+.lbox{flex:1;height:96px;font:inherit;font-size:22px;color:var(--ink);background:#111a28;border:1px solid var(--line);border-radius:24px;cursor:pointer;animation:in .5s 1.2s both;transition:border-color .15s}
+.lbox:hover{border-color:var(--acc)}.lbox.on{border-color:var(--acc);box-shadow:inset 0 0 0 2px var(--acc)} /* fixed so the stage never shifts between screens */
+h2{margin:0;font-size:22px;color:var(--ink)}p.sub{margin:4px 0 0;color:var(--mute)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:10px 0;border-top:1px solid var(--line)}
+.row small{display:block;color:var(--mute)}
+.sw{appearance:none;width:44px;height:24px;border-radius:12px;background:var(--line);position:relative;cursor:pointer;transition:.2s;flex:none}
+.sw::after{content:"";position:absolute;inset:3px auto 3px 3px;width:18px;border-radius:50%;background:#fff;transition:.2s}
+.sw:checked{background:var(--acc)}.sw:checked::after{transform:translateX(20px)}
+input[type=range]{width:180px;accent-color:var(--acc)}
+.val{min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+.seg{display:flex;gap:8px;flex-wrap:wrap}
+.seg button,.nav button{font:inherit;border-radius:10px;padding:8px 14px;border:1px solid var(--line);background:#111a28;color:var(--ink);cursor:pointer;transition:.15s}
+.seg button:hover,.nav button:hover{border-color:var(--acc)}
+.seg button.on{background:var(--acc);border-color:var(--acc);color:#04101f;font-weight:600}
+.nav{flex:none;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:12px 24px 16px}
+.nav #back{justify-self:start;background:none;border-color:transparent;color:var(--mute)}
+.reopen{font:inherit;border-radius:999px;padding:10px 24px;border:1px solid var(--line);background:#111a28;color:var(--ink);cursor:pointer}
+.nav .go{border-radius:999px;padding:10px 40px}
+.nav .go{background:var(--acc);border-color:var(--acc);color:#04101f;font-weight:600}
+button:focus-visible,input:focus-visible{outline:2px solid #fff;outline-offset:2px}
+pre{background:#0b111b;border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto;font-size:13px;max-height:220px}
+/* stage: two panels, equal gap g to edges and to each other */
+.stage{flex:2;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:var(--g);padding:var(--g)}
+.panel{position:relative;background:#262626;border:1px solid var(--line);border-radius:28px;overflow:hidden}
+.panel svg{width:100%;height:100%;display:block}
+.done{display:grid;place-items:center;padding-top:8px}
+.done svg{overflow:visible;animation:in .4s both,bump .35s cubic-bezier(.2,.9,.3,1.4) 1.2s;filter:drop-shadow(0 0 14px #4ade8088)}
+.done .ring{stroke-dasharray:283;stroke-dashoffset:283;animation:draw .7s ease-out .2s forwards}
+.done .tick{stroke-dasharray:70;stroke-dashoffset:70;animation:draw .45s ease-out .85s forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes bump{50%{transform:scale(1.12)}}
+.beds{flex:1;display:flex;gap:10px;align-items:center;justify-content:center}
+.bed{position:relative;flex:1 1 0;min-width:0;max-width:44px;height:30px;border-radius:8px;border:2px dashed #3a465c}
+.bed.on{border:0;background:#4db2ff;animation:pop .5s cubic-bezier(.2,.9,.3,1.4) calc(.8s + var(--i)*.07s) both}
+.bed.on::after{content:"";position:absolute;left:5px;top:6px;width:10px;height:18px;border-radius:4px;background:#fff;opacity:.85}
+@keyframes pop{from{transform:scale(0);opacity:0}}
+.calls{flex:1;align-self:stretch;position:relative;margin:6px 0;border-radius:14px;background:#0b111b;overflow:hidden}
+.call{position:absolute;width:12px;height:12px;margin:-6px;border-radius:50%;background:#4db2ff;animation:pop .4s cubic-bezier(.2,.9,.3,1.4) calc(.8s + var(--i)*.08s) both}
+.call::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid #4db2ff;animation:ping 1.8s ease-out calc(1.2s + var(--i)*.23s) infinite}
+@keyframes ping{from{transform:scale(1);opacity:.8}to{transform:scale(3.2);opacity:0}}
+.panel[tabindex]{cursor:pointer}.panel:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.stage.stack{grid-template-columns:1fr;grid-auto-rows:1fr}
+.bedp .mname{width:190px}
+.bslider{position:relative;height:10px;margin:14px 12px 4px;border-radius:999px;background:#2a374d;cursor:pointer;touch-action:none;--p:0%}
+.bfill{position:absolute;inset:0 auto 0 0;width:var(--p);border-radius:inherit;background:linear-gradient(90deg,#2a7bff,#4db2ff);box-shadow:0 0 12px #4db2ff88}
+.bthumb{position:absolute;top:50%;left:var(--p);width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;background:#fff;box-shadow:0 2px 8px #0008;transition:transform .15s}
+.bslider:active .bthumb{transform:scale(1.15)}
+.bslider:focus-visible{outline:2px solid #fff;outline-offset:8px}.bedval{font-weight:400;color:var(--mute)}
+.mixp{display:flex;align-items:center;gap:24px;padding:12px 24px;background:#131c2b}
+.mname{flex:none;width:130px;font-size:20px;font-weight:700}
+.bars{flex:1;height:100%;display:flex;gap:12px}
+.bars>div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;font-size:12px;color:var(--mute)}
+.bars i{width:100%;max-width:64px;height:calc(var(--p)*2px);background:var(--c);border-radius:10px 10px 4px 4px;animation:grow .9s cubic-bezier(.2,.8,.2,1) calc(.8s + var(--i)*.09s) both}
+@keyframes grow{from{height:0}}
+.panel::after{content:"";position:absolute;inset:0;border:3px solid var(--acc);border-radius:28px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:2}.panel.sel::after{opacity:1}
+.tag{position:absolute;left:12px;top:12px;z-index:1;padding:2px 10px;border-radius:999px;background:#000a;font-size:13px}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app"><div class="card">
+  <div class="top"><div><h2 id="h"></h2><p class="sub" id="sub"></p></div><div class="corner"><div class="lang"><button data-l="en">EN</button> <button data-l="de">DE</button></div><button id="skip"></button></div></div>
+  <div class="stage" id="stage"></div>
+  <div class="lower"><div class="body" id="body"></div>
+  <div class="nav"><button id="back"></button><button id="next" class="go"></button><span></span></div>
+  <div class="dots" id="dots"></div></div>
+</div></div>
+<button id="reopen" class="reopen" hidden></button>
+
+<script src="dispatch.js"></script>
+<script src="mix.js"></script>
+<script src="nef.js"></script>
+<script src="scene.js"></script>
+<script src="drive.js"></script>
+<script src="beds.js"></script>
+<script src="calls.js"></script>
+<script>
+// Defaults/ranges mirror RealisticEMS/Setting.cs
+const DEFAULTS={
+  realistic:{OnlyDepotsDispatch:true,AvailableOnlyAtDepot:true,CallVolume:"Balanced",CallMix:"Realistic",EnableNef:false,OnSceneMinutes:60,ParkOnSidewalk:true,EmergencyCorridor:true,OncomingOvertake:true,EmergencyLaneChange:true,ClearRedLight:true,BedCapacityPercent:25,RejectFullHospitals:true}
+};
+const S={...DEFAULTS.realistic};
+let lang=(navigator.language||"en").startsWith("de")?"de":"en", step=0;
+
+const T={
+ en:{back:"Back",next:"Next",done:"Finish",close:"Close",skip:"Skip",reopen:"Open setup",
+  
+  mix:{Realistic:"Realistic",Balanced:"Balanced",Dramatic:"Dramatic"},
+  min:"min",vanilla:"Vanilla",tags:["Vanilla","Realistic EMS"],bld:["Hospital","Depot"],nefTags:["Ambulance only","With emergency doctor"],
+  steps:[
+   {t:"Realistic EMS",s:""},
+   {t:"Welcome to Realistic EMS",s:""},
+   {t:"Dispatch",s:"Who sends the ambulance, and how severe are the calls?"},
+   {t:"Call volume",s:"How many emergency calls do you want?"},
+   {t:"Call severity",s:"How serious are the emergencies you get? Pick a mix."},
+   {t:"Emergency doctor",s:"Should hospitals also send an emergency doctor car? (experimental)"},
+   {t:"On-scene time",s:"How long do crews care for the patient?"},
+   {t:"Parking",s:"Where does the ambulance park while caring?"},
+   {t:"Emergency corridor",s:"Do cars make room when the ambulance is stuck?"},
+   {t:"Oncoming lane",s:"May the ambulance overtake the queue on the oncoming lane?"},
+   {t:"Lane change",s:"May the ambulance switch to a free neighbouring lane?"},
+   {t:"Red lights",s:"May cars ahead run the red light to clear the way?"},
+   {t:"Hospital beds",s:"How many beds do hospitals have compared to vanilla?"},
+   {t:"Full hospitals",s:"Should ambulances skip hospitals that are full?"},
+   {t:"Saved",s:""}]},
+ de:{back:"Zurück",next:"Weiter",done:"Fertig",close:"Schließen",skip:"Überspringen",reopen:"Einrichtung öffnen",
+  
+  mix:{Realistic:"Realistisch",Balanced:"Ausgewogen",Dramatic:"Dramatisch"},
+  min:"Min.",vanilla:"Standard",tags:["Standard","Realistic EMS"],bld:["Krankenhaus","Rettungswache"],nefTags:["Nur Rettungswagen","Mit Notarzt"],
+  steps:[
+   {t:"Realistic EMS",s:""},
+   {t:"Willkommen bei Realistic EMS",s:""},
+   {t:"Disposition",s:"Wer schickt den Rettungswagen, und wie schwer sind die Einsätze?"},
+   {t:"Einsatzhäufigkeit",s:"Wie viele Notrufe möchtest du?"},
+   {t:"Einsatzschwere",s:"Wie schwer sind die Notfälle? Wähle einen Mix."},
+   {t:"Notarzt",s:"Sollen Krankenhäuser zusätzlich einen Notarzt schicken? (experimentell)"},
+   {t:"Versorgungszeit",s:"Wie lange versorgt die Besatzung den Patienten?"},
+   {t:"Parken",s:"Wo parkt der Rettungswagen während der Versorgung?"},
+   {t:"Rettungsgasse",s:"Machen Autos Platz, wenn der Rettungswagen feststeckt?"},
+   {t:"Gegenfahrbahn",s:"Darf der Rettungswagen die Schlange auf der Gegenfahrbahn überholen?"},
+   {t:"Spurwechsel",s:"Darf der Rettungswagen auf eine freie Nachbarspur wechseln?"},
+   {t:"Rote Ampeln",s:"Dürfen Autos davor bei Rot fahren, um Platz zu machen?"},
+   {t:"Krankenhausbetten",s:"Wie viele Betten haben Krankenhäuser im Vergleich zum Standard?"},
+   {t:"Volle Krankenhäuser",s:"Soll der Rettungswagen volle Krankenhäuser überspringen?"},
+   {t:"Gespeichert",s:""}]}
+};
+
+const N=14;
+const $=s=>document.querySelector(s);
+// squircle-ish rounded rect centred on 0,0: both bezier handles on the corner give zero curvature at the joins
+const sq=(w,h,k)=>{const x=w/2,y=h/2;return `M${-x+k} ${-y}H${x-k}C${x} ${-y} ${x} ${-y} ${x} ${-y+k}V${y-k}C${x} ${y} ${x} ${y} ${x-k} ${y}H${-x+k}C${-x} ${y} ${-x} ${y} ${-x} ${y-k}V${-y+k}C${-x} ${-y} ${-x} ${-y} ${-x+k} ${-y}Z`};
+const CARS=[[100,100],[100,204],[100,308],[200,100],[200,204],[200,308]];
+// Ambulance centre-line per panel: [0] vanilla stops behind the jam, [1] mod weaves through the middle.
+const AP=["M200 540C200 480 150 470 150 375","M200 540C200 450 150 440 150 330L150 -80"];
+const RM=matchMedia("(prefers-reduced-motion:reduce)").matches;
+const clamp=p=>Math.max(0,Math.min(1,p));
+// helpers for the scene files: eased progress (in-out, out), 10 s loop fade, svg wrapper, n clickable panels, car placement
+const EIO=p=>{p=clamp(p);return p*p*(3-2*p)}, EO=p=>1-(1-clamp(p))**3, FADE=t=>t<.5?t/.5:t>9.3?(10-t)/.7:1;
+const SV=(body,vb="0 0 300 500")=>`<svg viewBox="${vb}" preserveAspectRatio="xMidYMid slice">${body}</svg>`;
+const PANELS=(n,tags,svg)=>Array.from({length:n},(_,m)=>`<div class="panel" role="button" tabindex="0" aria-label="${tags[m]}"><span class="tag">${tags[m]}</span>${svg(m)}</div>`).join("");
+const place=(el,x,y,a=-90)=>el.setAttribute("transform",`translate(${x} ${y}) rotate(${a})`);
+let scenes=[],start=0,prev=-1,pk="r"; // start: clock origin of the road animation
+const DEFS=`<defs><linearGradient id="cone"><stop offset="0" stop-color="#ffe14d" stop-opacity=".5"/><stop offset=".5" stop-color="#ffe14d" stop-opacity=".18"/><stop offset="1" stop-color="#ffe14d" stop-opacity="0"/></linearGradient><filter id="glow" x="-500%" y="-500%" width="1100%" height="1100%"><feGaussianBlur stdDeviation="9"/></filter><filter id="soft" x="-30%" y="-60%" width="160%" height="220%"><feGaussianBlur stdDeviation="7"/></filter></defs>`, AMB=`<path class="amb" fill="#e87333"/><path class="cross" fill="#fff"/><path class="ws" fill="#ffe3cf"/><path class="g1" filter="url(#glow)"/><path class="g2" filter="url(#glow)"/><path class="b1"/><path class="b2"/>`; // shared with dispatch.js
+const scene=m=>`<svg viewBox="0 0 300 500" preserveAspectRatio="xMidYMid slice"><rect width="300" height="500" fill="#262626"/><rect width="45" height="500" fill="#808080"/><rect x="255" width="45" height="500" fill="#808080"/><path d="M150 0V500" stroke="#e8e8e8" stroke-width="3" stroke-dasharray="16 14"/><path class="geo" d="${AP[m]}" fill="none"/>${DEFS}<g class="fade">${CARS.map(()=>`<path class="cone" d="M43 -16L130 -46V46L43 16Z" fill="url(#cone)" filter="url(#soft)"/>`).join("")}${CARS.map(()=>`<path class="car" d="${sq(90,60,20)}" fill="#fff"/>`).join("")}${AMB}</g></svg>`;
+const stage=()=>[0,1].map(m=>`<div class="panel" aria-hidden="true"><span class="tag">${T[lang].tags[m]}</span>${scene(m)}</div>`).join("");
+// Bendable ambulance. Needs a .geo path (its route) plus the AMB elements in the svg. draw(s,t): head is s units along the route,
+// body is rebuilt every frame as a ribbon along the route, so the whole shape bends. Route is extended straight past both ends.
+function rig(svg){
+  const geo=svg.querySelector(".geo"), L=geo.getTotalLength(), q=n=>svg.querySelector(n);
+  const a=geo.getPointAtLength(0),a1=geo.getPointAtLength(1),z=geo.getPointAtLength(L),z1=geo.getPointAtLength(L-1);
+  const pt=d=>d<0?[a.x+(a1.x-a.x)*d,a.y+(a1.y-a.y)*d]:d>L?[z.x+(z.x-z1.x)*(d-L),z.y+(z.y-z1.y)*(d-L)]:(p=>[p.x,p.y])(geo.getPointAtLength(d));
+  const frame=(d,o)=>{const [x,y]=pt(d),[x1,y1]=pt(d+.5),[x0,y0]=pt(d-.5),m=Math.hypot(x1-x0,y1-y0)||1;return [x-(y1-y0)/m*o,y+(x1-x0)/m*o]};
+  const ribbon=(s,a,b,hw,k,c=0)=>{const n=30,len=b-a,kk=Math.min(k,hw,len/2),A=[],B=[];
+    for(let i=0;i<=n;i++){const u=i/n,e=Math.min(u,1-u)*len,w=e<kk?hw-kk+kk*Math.cbrt(1-(1-e/kk)**3):hw;
+      A.push(frame(s-a-u*len,c+w));B.push(frame(s-a-u*len,c-w));}
+    return "M"+A.concat(B.reverse()).map(p=>p[0].toFixed(1)+" "+p[1].toFixed(1)).join("L")+"Z"};
+  return {L,ribbon,draw(s,t){
+    q(".amb").setAttribute("d",ribbon(s,0,100,22,14));
+    q(".cross").setAttribute("d",ribbon(s,49,77,4,1)+ribbon(s,59,67,14,1));
+    q(".ws").setAttribute("d",ribbon(s,7,19,16,4));
+    const ph=Math.floor(t/.3)%2;
+    [["1",9.5,ph],["2",-9.5,1-ph]].forEach(([n,o,on])=>{const d=ribbon(s,22,29,9,3,o);
+      q(".b"+n).setAttribute("d",d);q(".b"+n).setAttribute("fill",on?"#4db2ff":"#123e7a");
+      const g=q(".g"+n);g.setAttribute("d",d);g.setAttribute("stroke","#4db2ff");g.setAttribute("stroke-width",10);g.setAttribute("fill","#4db2ff");g.setAttribute("opacity",on?.75:.08)}); // soft blue glow around the lit half
+  }};
+}
+// Road scene update(t), t = seconds in a 10 s loop. Cars only slide sideways.
+function init(svg,mod){
+  const r=rig(svg), L=r.L, q=n=>svg.querySelector(n);
+  const cones=svg.querySelectorAll(".cone"),cars=[...svg.querySelectorAll(".car")].map((el,i)=>({el,co:cones[i],x:CARS[i][0],y:CARS[i][1],dx:CARS[i][0]<150?-22:22,t0:.9+(2-i%3)*.3}));
+  const ease=p=>{p=clamp(p);return p*p*(3-2*p)};
+  return t=>{
+    q(".fade").setAttribute("opacity",t<.5?t/.5:t>9.3?(10-t)/.7:1);
+    cars.forEach(c=>{const tr=`translate(${c.x+(mod?c.dx*ease((t-c.t0)/1.2):0)} ${c.y}) rotate(${c.x<150?90:-90})`;c.el.setAttribute("transform",tr);c.co.setAttribute("transform",tr)}); // left lane drives down, right lane up
+    r.draw(mod?clamp((t-.5)/5.8)*(L+80):(1-(1-clamp((t-.5)/3))**3)*L,t);
+  };
+}
+if(!RM)requestAnimationFrame(function loop(n){scenes.forEach(f=>f(Math.max(0,n-start)/1000%10));requestAnimationFrame(loop)});
+// Single exit point. Prototype: keeps the pairs in localStorage. In the game, each pair becomes one
+// trigger("realisticEMS","setSetting",name,value) (DispatchUISystem.SetSetting writes and saves it).
+// Enum settings (CallMix, CallVolume) are sent as their index, in the same order as the C# enums.
+const ENUMS={CallMix:["Realistic","Balanced","Dramatic"],CallVolume:["Few","Balanced","Many"]};
+const settingPairs=()=>Object.entries(S).map(([k,v])=>[k,ENUMS[k]?ENUMS[k].indexOf(v):+v]);
+// "Done" flag: in the game this becomes a saved bool on Setting (IntroSeen) so the intro opens only once.
+const DONE_KEY="realisticEMS.introDone";
+const isDone=()=>{try{return localStorage.getItem(DONE_KEY)==="1"}catch(e){return false}};
+// Skip: after a finished setup it changes nothing; before that it saves the mod defaults.
+function skipSetup(){if(!isDone()){Object.assign(S,DEFAULTS.realistic);BED_CUSTOM=S.BedCapacityPercent;bedCustom=true;saveSettings()}closeIntro()}
+// Prototype stand-in for closing the in-game popup.
+function closeIntro(){$(".app").hidden=true;$("#reopen").textContent=T[lang].reopen;$("#reopen").hidden=false}
+function saveSettings(){const p=settingPairs();try{localStorage.setItem(DONE_KEY,"1")}catch(e){}console.log("save settings",p);try{localStorage.setItem("realisticEMS.intro",JSON.stringify(p))}catch(e){}}
+// Intro heading: letters scramble, then lock in left to right
+let shown=false,scr;
+const GL="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&*+?<>/";
+function heading(txt){
+  const h=$("#h");cancelAnimationFrame(scr);
+  if(step!==0){shown=false;h.textContent=txt;return}
+  if(shown||RM){shown=true;h.textContent=txt;return}
+  shown=true;const t0=performance.now();
+  (function f(n){const p=(n-t0)/1500;
+    if(p>=1){h.textContent=txt;return}
+    h.textContent=[...txt].map((c,i)=>c===" "||p>.2+.8*i/txt.length?c:GL[Math.random()*GL.length|0]).join("");
+    scr=requestAnimationFrame(f)})(t0);
+}
+// Choice pages. key = setting, vals = value of panel 0,1,(2), stage = panel html, init = per-svg animation, stack = 3 panels below each other.
+// Binary settings: 2 panels side by side. Settings with levels: 3 panels stacked. The corridor page reuses the welcome road scene.
+const PG={
+  2:{key:"OnlyDepotsDispatch",vals:[false,true],stage:dstage,init:initDispatch},
+  3:{key:"CallVolume",vals:["Few","Balanced","Many"],stage:cstage,stack:1},
+  4:{key:"CallMix",vals:["Realistic","Balanced","Dramatic"],stage:mstage,stack:1},
+  5:{key:"EnableNef",vals:[false,true],stage:nstage,init:initNef},
+  6:{key:"OnSceneMinutes",vals:[0,30,60],stage:sstage,init:initScene,stack:1},
+  7:{key:"ParkOnSidewalk",vals:[false,true],stage:pstage,init:initPark},
+  8:{key:"EmergencyCorridor",vals:[false,true],stage,init},
+  9:{key:"OncomingOvertake",vals:[false,true],stage:onstage,init:initOnc},
+  10:{key:"EmergencyLaneChange",vals:[false,true],stage:lstage,init:initLane},
+  11:{key:"ClearRedLight",vals:[false,true],stage:rstage,init:initRed},
+  12:{key:"BedCapacityPercent",vals:BED_V,stage:bstage,stack:1,
+     set:v=>{bedCustom=v==="custom";S.BedCapacityPercent=bedCustom?BED_CUSTOM:v},isSel:v=>v==="custom"?bedCustom:!bedCustom&&S.BedCapacityPercent===v},
+  13:{key:"RejectFullHospitals",vals:[false,true],stage:hstage,init:initHosp}
+};
+// blue outline marks the panel that matches the current setting
+
+const syncSel=()=>{const g=PG[step];document.querySelectorAll("#stage .panel").forEach((p,i)=>p.classList.toggle("sel",!!g&&(g.isSel?g.isSel(g.vals[i]):S[g.key]===g.vals[i])))};
+function render(){
+  const t=T[lang], n=N;
+  $("#dots").innerHTML=Array.from({length:N},(_,i)=>`<i class="${i<=step?"on":""}"></i>`).join("");
+  document.querySelectorAll(".lang button").forEach(b=>b.classList.toggle("on",b.dataset.l===lang));
+  const st=$("#stage");
+  const pg=PG[step], kind=pg?step:"r";
+  if(st.dataset.l!==lang+kind){st.dataset.l=lang+kind;st.className="stage"+(pg&&pg.stack?" stack":"");st.innerHTML=(pg?pg.stage:stage)();scenes=pg&&!pg.init?[]:[...st.querySelectorAll("svg")].map(pg?pg.init:init);if(RM)scenes.forEach(f=>f(3.4));}
+  syncSel();
+  if(step>0&&(prev===0||kind!==pk))start=performance.now()+800;pk=kind; // each scene starts 0.8 s after Continue
+  prev=step;const fresh=!shown;$(".card").classList.toggle("intro",step===0||step===N);$(".card").classList.toggle("bare",step===1||!!pg);$(".top").classList.toggle("welcome",step<2||step===N);$(".top").classList.toggle("intro",step===0||step===N);$(".lang").style.visibility=step?"visible":"hidden";heading(t.steps[step].t);$("#sub").textContent=t.steps[step].s;
+  let h="";
+  if(step===0) h+=`<div class="langs">${[["en","English"],["de","Deutsch"]].map(([l,nm])=>`<button class="lbox ${lang===l?"on":""}" data-l="${l}"${fresh?"":' style="animation:none"'}>${nm}</button>`).join("")}</div>`;
+  else if(step===N) h+=`<div class="done"><svg viewBox="0 0 120 120" width="150" height="150" aria-hidden="true"><circle class="ring" cx="60" cy="60" r="45" fill="none" stroke="#4ade80" stroke-width="7" stroke-linecap="round" transform="rotate(-90 60 60)"/><path class="tick" d="M38 62l15 15 30-34" fill="none" stroke="#4ade80" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`;
+  $("#body").innerHTML=h;
+  $("#back").textContent=t.back; $("#back").style.visibility=step&&step<N?"visible":"hidden";
+  $("#skip").textContent=t.skip;$("#skip").style.visibility=step<N?"visible":"hidden";
+  $("#next").textContent=step===N?t.close:step===n-1?t.done:t.next;
+}
+document.addEventListener("click",e=>{
+  const pn=e.target.closest("#stage .panel"); // dispatch screen: clicking a panel picks it (right = depots only)
+  if(pn&&PG[step]){const g=PG[step],v=g.vals[[...pn.parentNode.children].indexOf(pn)];g.set?g.set(v):S[g.key]=v;syncSel();return}
+  const b=e.target.closest("button"); if(!b) return;
+  if(b.dataset.l){lang=b.dataset.l;render();}
+  else if(b.id==="back"){step--;render();}
+  else if(b.id==="next"){if(step===N)return closeIntro();if(step<N-1)step++;else{saveSettings();step=N}render();}
+  else if(b.id==="skip")skipSetup();
+  else if(b.id==="reopen"){b.hidden=true;$(".app").hidden=false;step=0;render();}
+});
+document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches("#stage .panel")){e.preventDefault();e.target.click()}});
+render();
+</script>
+</body>
+</html>

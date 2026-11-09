@@ -21,6 +21,7 @@ interface Police { callsign: string; status: string; station: string; x: number;
 interface State { overview: Overview; vehicles: Vehicle[]; hospitals: Hospital[]; stations: Station[]; police: Police[]; stats: Stats; }
 
 const open$ = bindValue<boolean>("realisticEMS", "open", false);
+const debug$ = bindValue<boolean>("realisticEMS", "debug", false);
 const state$ = bindValue<State | null>("realisticEMS", "state", null);
 const roads$ = bindValue<number[]>("realisticEMS", "roads", []); // 8 ints per road: bezier a,b,c,d as x,z
 const toggle = () => trigger("realisticEMS", "toggle");
@@ -566,6 +567,23 @@ const activeCalls = (s: State): Call[] => {
     return [...calls.values()].sort((a, b) => levelRank(a.level) - levelRank(b.level));
 };
 
+const SetupCard = () => (
+    <Card title={t("Einrichtung", "Setup")}>
+        <div className={styles.toolbar}>
+            <span className={styles.countLabel}>{t("Einrichtungsassistent erneut zeigen", "Show the setup screen again")}</span>
+            <button className={styles.chip} onClick={() => trigger("realisticEMS", "openIntro")}>{t("Öffnen", "Open")}</button>
+        </div>
+        <div className={styles.toolbar}>
+            <span className={styles.countLabel}>{t("\"Was ist neu\" erneut zeigen", "Show what's new again")}</span>
+            <button className={styles.chip} onClick={() => trigger("realisticEMS", "openNews")}>{t("Öffnen", "Open")}</button>
+        </div>
+        <div className={styles.toolbar}>
+            <span className={styles.countLabel}>{t("Fehler melden (GitHub) zeigen", "Show the bug report page")}</span>
+            <button className={styles.chip} onClick={() => trigger("realisticEMS", "openBugReport")}>{t("Öffnen", "Open")}</button>
+        </div>
+    </Card>
+);
+
 const DashboardTab = ({ s, go }: { s: State; go: (p: Page) => void }) => {
     const list = alerts(s);
     const calls = activeCalls(s);
@@ -617,6 +635,7 @@ const DashboardTab = ({ s, go }: { s: State; go: (p: Page) => void }) => {
                     ))}
                     {list.length > 5 && <div className={styles.note}>+ {list.length - 5} {t("weitere", "more")}</div>}
                 </Card>
+                <SetupCard />
             </div>
         </div>
     );
@@ -629,7 +648,7 @@ const settings$ = bindValue<SettingItem[]>("realisticEMS", "settings", []);
 const SETTING_GROUPS = {
     Disposition: { en: "Dispatch", names: ["RejectFullHospitals", "AvailableOnlyAtDepot", "OnlyDepotsDispatch", "DepotAmbulances", "BedCapacityPercent"] },
     Notarzt: { en: "Doctor & care", names: ["EnableNef", "NefPerHospital", "NefMaxWaitMinutes", "OnSceneMinutes"] },
-    Fahrverhalten: { en: "Driving", names: ["ParkOnSidewalk", "ParkAtCrossing", "PushBlockers", "EmergencyLaneChange", "TurnFromAnyLane", "ClearRedLight", "ClearRedLightMaxCars", "EmergencyCorridor", "MovingCorridor", "PoliceEmergencyDriving", "DriveThrough", "DriveThroughSeconds"] },
+    Fahrverhalten: { en: "Driving", names: ["ParkOnSidewalk", "ParkAtCrossing", "PushBlockers", "EmergencyLaneChange", "TurnFromAnyLane", "ClearRedLight", "ClearRedLightMaxCars", "EmergencyCorridor", "MovingCorridor", "PoliceEmergencyDriving"] },
     Anzeige: { en: "Display & debug", names: ["ShowUnitNames", "LogAmbulanceStates"] },
 } as const;
 type SettingGroup = keyof typeof SETTING_GROUPS;
@@ -677,17 +696,20 @@ const NAV: { de: string; en: string; items: { id: Page; de: string; en: string }
 export const EmsPanel = () => {
     const open = useValue(open$);
     const s = useValue(state$);
+    const debug = useValue(debug$);
     const [page, setPage] = useState<Page>("Dashboard");
     const [closed, setClosed] = useState<Record<string, boolean>>({});
     useLang();
     if (!open) return null;
     const active = s ? s.vehicles.filter(isActive).length : 0;
+    const nav = debug ? NAV : NAV.filter(g => g.en !== "System");
+    if (!debug && page === "Debug") setPage("Dashboard");
     const current = NAV.flatMap(g => g.items).find(x => x.id === page)!;
     return (
         <Panel draggable initialPosition={{ x: 0.5, y: 0.5 }} className={styles.panel} header={t("Leitstelle", "Dispatch")} onClose={toggle}>
             <div className={styles.shell}>
                 <nav className={styles.sidebar}>
-                    {NAV.map(g => (
+                    {nav.map(g => (
                         <div key={g.en} className={styles.navGroup}>
                             <button className={styles.navGroupHead} onClick={() => setClosed({ ...closed, [g.en]: !closed[g.en] })}>
                                 {t(g.de, g.en)}<span className={styles.caret}>{closed[g.en] ? "+" : "−"}</span>
@@ -707,7 +729,7 @@ export const EmsPanel = () => {
                     </div>
                     <Scrollable className={styles.content} vertical>
                         {page.startsWith("Einstellungen/") ? <SettingsTab group={page.split("/")[1] as SettingGroup} />
-                            : page === "Debug" ? <DebugTab />
+                            : page === "Debug" && debug ? <DebugTab />
                             : !s ? <Empty>{t("Warte auf Daten aus der Simulation …", "Waiting for simulation data …")}</Empty>
                             : page === "Dashboard" ? <DashboardTab s={s} go={setPage} />
                             : page === "Statistik" ? <LageTab s={s} />

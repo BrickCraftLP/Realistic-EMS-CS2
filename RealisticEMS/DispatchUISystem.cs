@@ -26,7 +26,7 @@ namespace RealisticEMS
     public partial class DispatchUISystem : UISystemBase
     {
         private const string Group = "realisticEMS";
-        private ValueBinding<bool> m_Open;
+        private ValueBinding<bool> m_Debug, m_Open, m_Intro, m_News, m_NewsBug;
         private RawValueBinding m_State, m_RoadsBinding, m_Settings;
         private EntityQuery m_Ambulances, m_Hospitals, m_Roads, m_Police, m_Healthy;
         private int m_RoadCount = -1;
@@ -49,21 +49,58 @@ namespace RealisticEMS
                 ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
             AddBinding(m_State = new RawValueBinding(Group, "state", Write));
             AddBinding(m_RoadsBinding = new RawValueBinding(Group, "roads", WriteRoads));
-            AddBinding(new TriggerBinding(Group, "toggle", () => { m_Open.Update(!m_Open.value); m_State.Update(); m_RoadCount = -1; }));
+            AddBinding(m_Debug = new ValueBinding<bool>(Group, "debug", false));
+            AddBinding(new TriggerBinding(Group, "toggle", () => { m_Debug.Update(DebugUnlocked); m_Open.Update(!m_Open.value); m_State.Update(); m_RoadCount = -1; }));
             m_Healthy = GetEntityQuery(ComponentType.ReadOnly<Citizen>(), ComponentType.ReadOnly<CurrentBuilding>(), ComponentType.Exclude<HealthProblem>(),
                 ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
             AddBinding(new TriggerBinding<string, int>(Group, "debugCall", DebugCall));
             AddBinding(m_Settings = new RawValueBinding(Group, "settings", WriteSettings));
             AddBinding(new TriggerBinding<string, int>(Group, "setSetting", SetSetting));
+            // Setup screen (intro.tsx): opens on the first game load, again from the Dashboard.
+            AddBinding(m_Intro = new ValueBinding<bool>(Group, "intro", false));
+            AddBinding(new TriggerBinding(Group, "openIntro", () => { m_Settings.Update(); m_Intro.Update(true); }));
+            AddBinding(new TriggerBinding(Group, "closeIntro", () =>
+            {
+                m_Intro.Update(false);
+                if (!Mod.Setting.IntroSeen) { Mod.Setting.IntroSeen = true; Mod.Setting.ApplyAndSave(); }
+                if (NewsDue) m_News.Update(true); // news.tsx follows the setup screen
+            }));
+            // "What's new" screen (news.tsx): once per version, after the setup screen or straight on game load.
+            AddBinding(m_News = new ValueBinding<bool>(Group, "news", false));
+            AddBinding(m_NewsBug = new ValueBinding<bool>(Group, "newsBug", false)); // true: open straight on the bug report page
+            AddBinding(new TriggerBinding(Group, "openNews", () => { m_NewsBug.Update(false); m_News.Update(true); }));
+            AddBinding(new TriggerBinding(Group, "openBugReport", () => { m_NewsBug.Update(true); m_News.Update(true); }));
+            AddBinding(new TriggerBinding(Group, "closeNews", () =>
+            {
+                m_News.Update(false);
+                m_NewsBug.Update(false);
+                if (NewsDue) { Mod.Setting.LastSeenVersion = Mod.Version; Mod.Setting.ApplyAndSave(); }
+            }));
+            // Fixed URLs only: the UI cannot ask for an arbitrary address.
+            AddBinding(new TriggerBinding(Group, "openIssues", () => UnityEngine.Application.OpenURL("https://github.com/BrickCraftLP/Realistic-EMS-CS2/issues")));
+            AddBinding(new TriggerBinding(Group, "openReleases", () => UnityEngine.Application.OpenURL("https://github.com/BrickCraftLP/Realistic-EMS-CS2/releases")));
             VehicleStateSection.Install(World);
         }
+
+        protected override void OnGameLoadingComplete(Colossal.Serialization.Entities.Purpose purpose, Game.GameMode mode)
+        {
+            base.OnGameLoadingComplete(purpose, mode);
+            if (mode != Game.GameMode.Game) return;
+            if (!Mod.Setting.IntroSeen) { m_Settings.Update(); m_Intro.Update(true); }
+            else if (NewsDue) m_News.Update(true);
+        }
+
+        private static bool NewsDue => Mod.Setting.LastSeenVersion != Mod.Version;
 
         /// <summary>
         /// Debug tab: makes random citizens inside a building sick or injured, the same event vanilla's health system raises.
         /// kind: "sick", "injured", "critical", "door" (locked door), a code like "09E01" or a protocol like "25" (random code of it).
         /// </summary>
+        private static bool DebugUnlocked => Mod.Setting.DebugPassword == Setting.DebugPasswordValue;
+
         private void DebugCall(string kind, int count)
         {
+            if (!DebugUnlocked) return;
             var flags = (kind == "injured" ? HealthProblemFlags.Injured : HealthProblemFlags.Sick) | HealthProblemFlags.RequireTransport;
             // Determinant 00 is the "Aufwertung" (override) row, not a real call.
             var codes = kind.Length == 5 ? Ampds.Codes.Where(c => c.ToString().Replace("-", "") == kind).ToList()
@@ -89,9 +126,10 @@ namespace RealisticEMS
             Mod.log.Info($"Debug: {count} x {kind} call(s) raised from {citizens.Length} candidates");
         }
 
-        /// <summary>Settings page: every writable bool/int of Setting, with slider bounds. Labels come from the locale IDs.</summary>
+        /// <summary>Settings page: every writable bool/int/enum of Setting, with slider bounds. Labels come from the locale IDs.
+        /// Enums are sent as their index (max = last index); the settings tab skips them, the setup screen reads them.</summary>
         private static IEnumerable<System.Reflection.PropertyInfo> EditableSettings() => typeof(Setting).GetProperties()
-            .Where(p => p.CanWrite && p.DeclaringType == typeof(Setting) && (p.PropertyType == typeof(bool) || p.PropertyType == typeof(int)));
+            .Where(p => p.CanRead && p.CanWrite && p.DeclaringType == typeof(Setting) && (p.PropertyType == typeof(bool) || p.PropertyType == typeof(int) || p.PropertyType.IsEnum));
 
         private void WriteSettings(IJsonWriter w)
         {
@@ -106,9 +144,9 @@ namespace RealisticEMS
                 w.PropertyName("label"); w.Write(s.GetOptionLabelLocaleID(p.Name));
                 w.PropertyName("desc"); w.Write(s.GetOptionDescLocaleID(p.Name));
                 w.PropertyName("bool"); w.Write(p.PropertyType == typeof(bool));
-                w.PropertyName("value"); w.Write(p.PropertyType == typeof(bool) ? ((bool)p.GetValue(s) ? 1 : 0) : (int)p.GetValue(s));
+                w.PropertyName("value"); w.Write(System.Convert.ToInt32(p.GetValue(s)));
                 w.PropertyName("min"); w.Write(slider != null ? (int)slider.min : 0);
-                w.PropertyName("max"); w.Write(slider != null ? (int)slider.max : 1);
+                w.PropertyName("max"); w.Write(slider != null ? (int)slider.max : p.PropertyType.IsEnum ? System.Enum.GetValues(p.PropertyType).Length - 1 : 1);
                 w.PropertyName("step"); w.Write(slider != null ? (int)slider.step : 1);
                 w.TypeEnd();
             }
@@ -117,7 +155,15 @@ namespace RealisticEMS
 
         private void SetSetting(string name, int value)
         {
-            var p = EditableSettings().FirstOrDefault(x => x.Name == name);
+            var en = typeof(Setting).GetProperty(name);
+            if (en != null && en.CanWrite && en.PropertyType.IsEnum) // enums (CallMix, CallVolume) are not in EditableSettings; the intro sends their index
+            {
+                en.SetValue(Mod.Setting, System.Enum.ToObject(en.PropertyType, math.clamp(value, 0, System.Enum.GetValues(en.PropertyType).Length - 1)));
+                Mod.Setting.ApplyAndSave();
+                m_Settings.Update();
+                return;
+            }
+            var p =EditableSettings().FirstOrDefault(x => x.Name == name);
             if (p == null) { Mod.log.Warn($"Settings: unknown option {name}"); return; }
             var slider = (Game.Settings.SettingsUISliderAttribute)System.Attribute.GetCustomAttribute(p, typeof(Game.Settings.SettingsUISliderAttribute));
             if (slider != null) value = math.clamp(value, (int)slider.min, (int)slider.max);
@@ -132,6 +178,7 @@ namespace RealisticEMS
             uint now = m_Sim.frameIndex;
             if (now - m_LastTrack >= TrackFrames) { m_LastTrack = now; Track(now); }
             if (now - m_LastSample >= SampleFrames) { m_LastSample = now; Sample(); }
+            m_Debug.Update(DebugUnlocked); // live: unlocks without reopening the window
             if (!m_Open.value || ++m_Frame % 30 != 0) return;
             m_State.Update();
             // ponytail: road count as change signal; a moved road with same count is missed until the panel is reopened.
