@@ -97,6 +97,18 @@ namespace RealisticEMS
                     ambulances[i] = a;
                     changed = true;
                 }
+                // Heading home without a critical patient: no blue lights (vanilla only re-evaluates them on a new path).
+                const AmbulanceFlags urgent = AmbulanceFlags.Transporting | AmbulanceFlags.Critical;
+                if ((a.m_State & AmbulanceFlags.Returning) != 0 && (a.m_State & urgent) != urgent && EntityManager.HasComponent<Car>(entities[i]))
+                {
+                    var car = EntityManager.GetComponentData<Car>(entities[i]);
+                    if ((car.m_Flags & CarFlags.Emergency) != 0)
+                    {
+                        car.m_Flags &= ~CarFlags.Emergency;
+                        EntityManager.SetComponentData(entities[i], car);
+                        if (!EntityManager.HasComponent<EffectsUpdated>(entities[i])) EntityManager.AddComponent<EffectsUpdated>(entities[i]);
+                    }
+                }
                 // Hospital pathfind failed: vanilla brings the patient to the ambulance's own building (the depot,
                 // which loops). Attempt 1: search again with the full-hospital filter suspended. Attempt 2: borrow the
                 // nearest suitable hospital as owner, so vanilla's return-to-owner trip (with SpecialParking into the

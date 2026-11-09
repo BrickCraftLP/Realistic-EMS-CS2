@@ -128,7 +128,7 @@ namespace RealisticEMS
                 }
                 if (needed && !call.Done) m_Parking.ArriveIfQueued(car, call.Location); // stuck behind the call's other vehicles
                 if (needed && !call.Done && Arrived(car, call)) { Hold(car, call, now, cap); continue; }
-                if (Returning(car)) continue; // vanilla turns the lights off
+                if (call.Done || Returning(car)) { LightsOff(car); continue; } // vanilla never clears the flag we set
                 Lights(car);
             }
         }
@@ -143,6 +143,16 @@ namespace RealisticEMS
             var c = em.GetComponentData<Car>(car);
             if ((c.m_Flags & CarFlags.Emergency) != 0) return;
             c.m_Flags |= CarFlags.Emergency | CarFlags.StayOnRoad;
+            em.SetComponentData(car, c);
+            if (!em.HasComponent<EffectsUpdated>(car)) em.AddComponent<EffectsUpdated>(car);
+        }
+
+        private void LightsOff(Entity car)
+        {
+            var em = EntityManager;
+            var c = em.GetComponentData<Car>(car);
+            if ((c.m_Flags & CarFlags.Emergency) == 0) return;
+            c.m_Flags &= ~CarFlags.Emergency;
             em.SetComponentData(car, c);
             if (!em.HasComponent<EffectsUpdated>(car)) em.AddComponent<EffectsUpdated>(car);
         }

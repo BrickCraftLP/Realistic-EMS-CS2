@@ -2,7 +2,7 @@
 
 A Cities: Skylines II code mod that reworks ambulances, modelled on Vienna's emergency medical service (Wiener Rettung).
 
-> **Beta:** back up your saves. Report bugs at https://github.com/BrickCraftLP/Realistic-EMS-CS2/issues and attach `Logs/RealisticEMS.log` (turn on **Debug logging** in the options first).
+> **Beta:** back up your saves. Report bugs at https://github.com/BrickCraftLP/Realistic-EMS-CS2/issues and attach the log: turn on **Debug logging** in the options, press **Export log** and attach the new folder from `Logs/`.
 
 ## Why this mod exists
 

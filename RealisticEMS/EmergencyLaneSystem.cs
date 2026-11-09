@@ -58,7 +58,7 @@ namespace RealisticEMS
         protected override void OnUpdate()
         {
             var s = Mod.Setting;
-            if (!s.PushBlockers && !s.EmergencyLaneChange && !s.DriveThrough && !s.EmergencyCorridor && !s.MovingCorridor && !s.OncomingOvertake) return;
+            if (!s.PushBlockers && !s.EmergencyLaneChange &&!s.EmergencyCorridor && !s.MovingCorridor && !s.OncomingOvertake) return;
             var em = EntityManager;
             using var entities = m_Query.ToEntityArray(Allocator.Temp);
             var lanes = m_Query.ToComponentDataArray<CarCurrentLane>(Allocator.Temp);
@@ -93,17 +93,7 @@ namespace RealisticEMS
                 m_StuckFrames[e] = stuckFrames;
                 FinishRouteLaneSwap(e, lane);
 
-                if (fire)
-                {
-                    // Fire engines only overtake on the oncoming lane (same rules as below), no other driving aids.
-                    if (s.OncomingOvertake && lane.m_ChangeLane == Entity.Null
-                        && (m_Oncoming.ContainsKey(e) || (blockedFrames >= 60 && StartOncoming(e, lane, blockerCar, speed)))
-                        && !OncomingOvertake(e, ref lane, speed, blockerCar)) EndOncoming(e);
-                    if (!lane.Equals(before)) { lanes[i] = lane; changed = true; }
-                    continue;
-                }
-
-                if (s.PushBlockers && blockedByCar) lane.m_LaneFlags |= CarLaneFlags.PushBlockers;
+                if (!fire && s.PushBlockers && blockedByCar) lane.m_LaneFlags |= CarLaneFlags.PushBlockers;
 
                 // During our lane change vanilla still treats the car ahead in the old lane as blocker, so a stopped
                 // ambulance can neither move forward nor steer over (steering needs forward motion). Ignore that
@@ -130,8 +120,20 @@ namespace RealisticEMS
                         }
                         m_RouteLane.Remove(e);
                     }
-                    else if (blockedByCar && blockedFrames >= 6)
+                    // Not while in a corridor: its yielding cars are taken out of the lane lists, so other lanes look
+                    // free and the ambulance would hop between lanes instead of driving through.
+                    else if (blockedByCar && blockedFrames >= 6 && !m_InCorridor.Contains(e))
                         TryOvertake(ref lane, e);
+                }
+
+                if (fire)
+                {
+                    // Too big for a corridor: free-lane overtake above (multi-lane) or the oncoming lane (one lane per direction).
+                    if (s.OncomingOvertake && lane.m_ChangeLane == Entity.Null
+                        && (m_Oncoming.ContainsKey(e) || (blockedFrames >= 60 && StartOncoming(e, lane, blockerCar, speed)))
+                        && !OncomingOvertake(e, ref lane, speed, blockerCar)) EndOncoming(e);
+                    if (!lane.Equals(before)) { lanes[i] = lane; changed = true; }
+                    continue;
                 }
 
                 // Two-lane road with trucks in the queue, or slow traffic and a free oncoming lane: overtake on the
@@ -157,10 +159,15 @@ namespace RealisticEMS
                         Mod.log.Info($"Ambulance {e.Index}: kommt nicht durch, Rettungsgasse aufgelöst");
                     }
                     else if (Corridor(e, ref lane, blockerCar)) { if (m_InCorridor.Add(e)) Mod.log.Info($"Ambulance {e.Index}: Rettungsgasse auf Spur {lane.m_Lane.Index}"); }
-                    else EndCorridor(e);
+                    else
+                    {
+                        if (m_InCorridor.Contains(e)) Mod.log.Info($"Ambulance {e.Index}: Rettungsgasse beendet (vorbei oder niemand mehr vor ihr)");
+                        EndCorridor(e);
+                    }
                 }
                 else
                 {
+                    if (m_InCorridor.Contains(e)) Mod.log.Info($"Ambulance {e.Index}: Rettungsgasse beendet ({(oncoming ? "Gegenfahrbahn" : lane.m_ChangeLane != Entity.Null ? "Spurwechsel" : "Einstellung aus")})");
                     EndCorridor(e);
                     // Still driving: traffic ahead slows down and keeps right. Once started it stays on while the
                     // ambulance slows down, else the cars are released and frozen again in turn (stop-and-go).
@@ -169,13 +176,7 @@ namespace RealisticEMS
                     if (movingCorridor) m_MovingActive.Add(e); else m_MovingActive.Remove(e);
                 }
 
-                if (s.ClearRedLight && blockedByCar && RemainingDistance(lane) < 60f) ClearCarsAtRedLight(e, lane);
-
-                if (s.DriveThrough && blockedByCar && blockedFrames >= s.DriveThroughSeconds * 60)
-                {
-                    lane.m_LaneFlags |= CarLaneFlags.IgnoreBlocker;
-                    if (blockedFrames == s.DriveThroughSeconds * 60) Mod.log.Info($"Ambulance {e.Index}: fährt durch blockierendes Fahrzeug {blocker.m_Blocker.Index}");
-                }
+                if (s.ClearRedLight && blockedByCar && !m_InCorridor.Contains(e) && RemainingDistance(lane) < 60f) ClearCarsAtRedLight(e, lane);
 
                 if (!lane.Equals(before)) { lanes[i] = lane; changed = true; }
             }
@@ -263,7 +264,9 @@ namespace RealisticEMS
             // Light ahead turned green (also our forced green for the first cars): the queue drives off normally and
             // the ambulance follows. The corridor is only for a standing queue.
             // Once per stuck episode: if the queue still stands after a green (jammed junction), the corridor is allowed.
-            if (!m_GreenIgnore.ContainsKey(e) && QueueHasGreen(ahead))
+            // Multi-lane: the ambulance passes between the lanes anyway; dropping the corridor on green (often our own
+            // forced green) froze and released the cars every second, so they never made room.
+            if (!m_GreenIgnore.ContainsKey(e) && ParallelLanes(lane, e).Count < 2 && QueueHasGreen(ahead))
             {
                 Mod.log.Info($"Ambulance {e.Index}: Ampel grün, Rettungsgasse aufgelöst");
                 m_GreenIgnore[e] = GreenIgnoreFrames;
@@ -313,7 +316,7 @@ namespace RealisticEMS
             {
                 float side = me == gapLeft ? -1f : 1f; // our own lane's cars move away from the gap
                 for (int i = 0; i < ahead.Count; i++)
-                    shifts[i] = side * EdgeShift(ahead[i]);
+                    shifts[i] = side * CorridorShift(e, ahead[i]);
                 passOffset = (parallel[gapLeft].offset + parallel[gapLeft + 1].offset) * 0.5f;
             }
             else
@@ -354,6 +357,18 @@ namespace RealisticEMS
             return true;
         }
 
+        /// <summary>
+        /// Multi-lane: metres a car moves away from the line the emergency vehicle drives on. Staying inside its lane
+        /// (EdgeShift) leaves only ~1.9 m between two cars on 3 m lanes, too narrow for an ambulance, so the cars go
+        /// over their outer lane edge as far as needed, like a real Rettungsgasse.
+        /// </summary>
+        private float CorridorShift(Entity e, Entity car)
+        {
+            var lane = EntityManager.GetComponentData<CarCurrentLane>(car).m_Lane;
+            float halfGap = VehicleWidth(e) * 0.5f + CorridorGap; // from the line to the car's near side
+            return math.max(EdgeShift(car), halfGap + VehicleWidth(car) * 0.5f - LaneWidth(lane) * 0.5f);
+        }
+
         /// <summary>Metres a car can move from its lane centre to the lane edge.</summary>
         private float EdgeShift(Entity car)
         {
@@ -386,7 +401,7 @@ namespace RealisticEMS
                 m_Held[car] = (e, 0);
                 if (HasTrailer(car)) continue; // its trailer cannot be slid aside: it only stops
                 var cl = em.GetComponentData<CarCurrentLane>(car);
-                SetLateral(car, ref cl, side * EdgeShift(car), slide: true);
+                SetLateral(car, ref cl, side * CorridorShift(e, car), slide: true);
                 em.SetComponentData(car, cl);
             }
         }
@@ -618,7 +633,8 @@ namespace RealisticEMS
             var oncoming = OncomingLane(e, lane);
             if (oncoming == Entity.Null) return false;
             var pass = new OncomingPass { Own = lane.m_Lane, Oncoming = oncoming, Entries = OncomingEntries(oncoming) };
-            bool truck = TruckAhead(e, lane, blocker);
+            // A big vehicle (fire engine) gets no corridor: it may close the oncoming lane for any standing queue.
+            bool truck = VehicleLength(e) > BigVehicleLength || TruckAhead(e, lane, blocker);
             if (!truck && !(speed >= 1f && OncomingClear(e, pass))) return false;
             m_OncomingCooldown.Remove(e);
             m_Oncoming[e] = pass;
@@ -665,17 +681,19 @@ namespace RealisticEMS
             if (p.Queue.Count == 0 && !p.There) { p.Failed = true; return false; } // nothing to pass: no retry every frame
 
             float target = p.Queue.Count > 0 ? -(LaneWidth(p.Own) + LaneWidth(p.Oncoming)) * 0.5f : 0f;
-            float lateral = SetLateral(e, ref lane, target, slide: speed < 1.5f);
+            // Slide sideways only while standing; once halfway out the queue leaves the lane lists, so the
+            // ambulance pulls out diagonally while driving instead of crab-walking the whole way.
+            float lateral = SetLateral(e, ref lane, target, slide: speed < 0.5f && !p.There);
             if (p.Queue.Count == 0) return math.abs(lateral) > 0.3f; // back in its own lane: done
-            p.There |= math.abs(lateral - target) <= 0.3f;
+            p.There |= math.abs(lateral) >= math.abs(target) * 0.5f;
+            // Anything on the oncoming lane ahead (late lane changers, driveways) stops and keeps right.
+            YieldOncoming(e, lane);
             foreach (var car in p.Queue)
             {
                 Freeze(car);
                 m_Held[car] = (e, 0); // drives on once the ambulance is past
                 if (p.There) RemoveFromLanes(car);
             }
-            // A blocker vanilla finds outside the lane lists (e.g. a bus at its stop) is ignored directly.
-            if (p.There && p.Queue.Contains(blocker)) lane.m_LaneFlags |= CarLaneFlags.IgnoreBlocker;
             return true;
         }
 
@@ -1066,16 +1084,16 @@ namespace RealisticEMS
         {
             var em = EntityManager;
             if (!em.HasBuffer<CarNavigationLane>(e) || !em.HasComponent<Curve>(lane.m_Lane)) return false;
-            var nav = em.GetBuffer<CarNavigationLane>(e);
-            if (nav.Length == 0) return false;
-            var node = nav[0].m_Lane;
-            if (!em.HasComponent<Curve>(node) || !em.HasComponent<Owner>(node) || !em.HasComponent<Node>(em.GetComponentData<Owner>(node).m_Owner)) return false;
+            // nav[0] is not always the junction lane (e.g. route lane still listed after our manual change).
+            var node = NextNodeLane(e);
+            if (node == Entity.Null || !em.HasComponent<Curve>(node)) return false;
 
             var mine = em.GetComponentData<Curve>(lane.m_Lane).m_Bezier;
             bool forward = lane.m_CurvePosition.z >= lane.m_CurvePosition.x;
             float3 start = forward ? mine.d : mine.a;
             var orig = em.GetComponentData<Curve>(node).m_Bezier;
-            if (math.distance(start, orig.a) > 12f) return false; // not the neighbouring lane's connection: do nothing
+            // Leftmost turn pocket -> right turn crosses the whole carriageway; 12 m failed on 3+ lane approaches.
+            if (math.distance(start, orig.a) > 25f) return false; // ponytail: distance guess, check same node if it misfires
 
             var temp = em.Instantiate(node);
             if (em.HasComponent<LaneSignal>(temp)) em.RemoveComponent<LaneSignal>(temp); // lights: ambulance has priority anyway
@@ -1083,8 +1101,14 @@ namespace RealisticEMS
             var bez = new Colossal.Mathematics.Bezier4x3(start, start + (orig.b - orig.a), orig.c, orig.d);
             em.SetComponentData(temp, new Curve { m_Bezier = bez, m_Length = Colossal.Mathematics.MathUtils.Length(bez) });
 
-            nav = em.GetBuffer<CarNavigationLane>(e); // structural changes above invalidate the old handle
-            var n0 = nav[0]; n0.m_Lane = temp; nav[0] = n0;
+            var nav = em.GetBuffer<CarNavigationLane>(e); // after the structural changes above
+            for (int k = 0; k < nav.Length; k++)
+            {
+                if (nav[k].m_Lane != node) continue;
+                var n = nav[k]; n.m_Lane = temp; nav[k] = n;
+                if (k > 0) nav.RemoveRange(0, k); // drop the route lane we no longer drive on
+                break;
+            }
             if (em.HasBuffer<Game.Pathfind.PathElement>(e))
             {
                 var path = em.GetBuffer<Game.Pathfind.PathElement>(e);
@@ -1140,6 +1164,9 @@ namespace RealisticEMS
             lane.m_ChangeProgress = 0f;
             lane.m_LaneFlags |= CarLaneFlags.IgnoreBlocker;
             m_Changing.Add(e);
+            // Vanilla completes the change within a tick or two but keeps the old lane's blocker a while longer:
+            // wait ~1 s for a fresh one before the next change, else the ambulance ping-pongs between lanes.
+            m_BlockedFrames[e] = -60;
             Mod.log.Info($"Ambulance {e.Index}: Spurwechsel ({why})");
         }
 

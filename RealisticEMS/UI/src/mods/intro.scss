@@ -1,0 +1,98 @@
+// Setup screen (intro.tsx), from prototype/intro.html. Global class names, so everything sits under .ems-intro.
+// Gameface: flexbox with margins instead of grid/gap, no CSS variables, no inset shorthand.
+$card: #182131;
+$ink: #e8eef7;
+$mute: #8fa0b8;
+$line: #2a374d;
+$acc: #3ea6ff;
+$g: 16rem;
+
+@keyframes ei-in { from { opacity: 0; transform: translateY(10rem); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ei-pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes ei-ping { from { transform: scale(1); opacity: 0.8; } to { transform: scale(3.2); opacity: 0; } }
+@keyframes ei-grow { from { height: 0; } }
+@keyframes ei-draw { to { stroke-dashoffset: 0; } }
+
+.ems-intro {
+    position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    background-color: rgba(4, 8, 16, 0.6); pointer-events: auto;
+    color: $ink; font-size: 16rem;
+
+    button { font-size: inherit; color: $ink; cursor: pointer; }
+
+    .card {
+        position: relative; display: flex; flex-direction: column; width: 720rem; height: 860rem; overflow: hidden;
+        background-color: $card; background-image: linear-gradient(135deg, rgba(42, 123, 255, 0.35), rgba(42, 123, 255, 0) 45%, rgba(255, 64, 64, 0) 55%, rgba(255, 64, 64, 0.35));
+        border: 1rem solid $line; border-radius: 40rem; box-shadow: 0 20rem 60rem rgba(0, 0, 0, 0.55);
+    }
+
+    h2 { margin: 0; font-size: 22rem; color: $ink; }
+    .sub { margin: 4rem 0 0 0; color: $mute; }
+
+    .top { position: relative; flex: none; display: flex; flex-direction: row; align-items: flex-start; padding: 20rem 24rem 4rem 24rem; color: $mute; font-size: 14rem; }
+    .head { flex: 1; height: 88rem; padding-right: 190rem; }
+    .top.welcome .head { padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    .top.welcome h2 { font-size: 40rem; }
+    .top.big h2 { font-size: 60rem; }
+    .corner { position: absolute; right: 24rem; top: 20rem; display: flex; flex-direction: row; align-items: center; }
+    #skip { background: none; border: 1rem solid $line; color: $mute; border-radius: 6rem; padding: 2rem 10rem; font-size: 14rem; }
+    #skip:hover { border-color: $acc; color: $ink; }
+
+    // two panels side by side, or three stacked; gap g everywhere
+    .stage { flex: 2; min-height: 0; display: flex; flex-direction: row; padding: $g; }
+    .stage.stack { flex-direction: column; }
+    .panel { position: relative; flex: 1; min-width: 0; min-height: 0; background-color: #262626; border: 2rem solid $line; border-radius: 28rem; overflow: hidden; cursor: pointer; }
+    .panel + .panel { margin-left: $g; }
+    .stage.stack .panel + .panel { margin-left: 0; margin-top: $g; }
+    .panel.sel { border-color: $acc; }
+    .panel svg { width: 100%; height: 100%; }
+    .tag { position: absolute; left: 12rem; top: 12rem; padding: 2rem 10rem; border-radius: 999rem; background-color: rgba(0, 0, 0, 0.65); font-size: 13rem; }
+
+    .lower { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .body { flex: 1; padding: 8rem 24rem 0 24rem; animation: ei-in 0.4s both; }
+    .nav { flex: none; display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 12rem 24rem 16rem 24rem; }
+    .nav > span, #back { width: 160rem; }
+    #back { background: none; border: none; color: $mute; text-align: left; padding: 8rem 0; }
+    .go { border-radius: 999rem; padding: 10rem 40rem; background-color: $acc; border: 1rem solid $acc; color: #04101f; font-weight: 600; }
+    .dots { flex: none; display: flex; flex-direction: row; justify-content: center; padding: 0 24rem 20rem 24rem; }
+    .dots i { width: 28rem; height: 4rem; margin: 0 3rem; border-radius: 2rem; background-color: $line; transition: background-color 0.3s; }
+    .dots i.on { background-color: $acc; }
+
+    // language screen: heading + boxes centred, stage hidden; welcome/choice screens: panels take the space
+    .card.intro .stage { position: absolute; left: 0; top: 0; width: 100%; height: 100%; visibility: hidden; pointer-events: none; }
+    .card.intro .top { flex: 1; align-items: flex-end; padding-bottom: 24rem; }
+    .card.intro .head { height: auto; }
+    .card.bare .lower { flex: none; }
+    .card.bare .stage { flex: 1; }
+    .langs { display: flex; flex-direction: row; padding-top: 8rem; }
+    .lbox { flex: 1; height: 96rem; font-size: 22rem; background-color: #111a28; border: 1rem solid $line; border-radius: 24rem; animation: ei-in 0.5s 1.2s both; }
+    .lbox + .lbox { margin-left: $g; }
+    .lbox:hover, .lbox.on { border-color: $acc; }
+    .lbox.on { border-width: 3rem; }
+
+    .done { display: flex; justify-content: center; padding-top: 8rem; }
+    .done .ring { stroke-dasharray: 283; stroke-dashoffset: 283; animation: ei-draw 0.7s ease-out 0.2s forwards; }
+    .done .tick { stroke-dasharray: 70; stroke-dashoffset: 70; animation: ei-draw 0.45s ease-out 0.85s forwards; }
+
+    // stacked option rows: name left, picture right
+    .mixp { display: flex; flex-direction: row; align-items: center; padding: 12rem 24rem; background-color: #131c2b; }
+    .mname { flex: none; width: 130rem; margin-right: 24rem; font-size: 20rem; font-weight: 700; }
+    .bars { flex: 1; height: 100%; display: flex; flex-direction: row; }
+    .bars > div { flex: 1; margin: 0 6rem; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; font-size: 12rem; color: $mute; }
+    .bars i { width: 100%; max-width: 64rem; margin: 4rem 0; border-radius: 10rem 10rem 4rem 4rem; animation: ei-grow 0.9s 0.8s both; }
+
+    .calls { flex: 1; align-self: stretch; position: relative; margin: 6rem 0; border-radius: 14rem; background-color: #0b111b; overflow: hidden; }
+    .call { position: absolute; width: 12rem; height: 12rem; margin: -6rem 0 0 -6rem; border-radius: 6rem; background-color: #4db2ff; animation: ei-pop 0.4s both; }
+    .call b { position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: 6rem; border: 2rem solid #4db2ff; animation: ei-ping 1.8s ease-out infinite; }
+
+    .bedp .mname { width: 190rem; }
+    .bedval { font-weight: 400; color: $mute; }
+    .beds { flex: 1; display: flex; flex-direction: row; align-items: center; justify-content: center; }
+    .bed { position: relative; flex: 1; min-width: 0; max-width: 44rem; height: 30rem; margin: 0 5rem; border-radius: 8rem; border: 2rem dashed #3a465c; }
+    .bed.on { border: none; background-color: #4db2ff; animation: ei-pop 0.5s both; }
+    .bed b { position: absolute; left: 5rem; top: 6rem; width: 10rem; height: 18rem; border-radius: 4rem; background-color: rgba(255, 255, 255, 0.85); }
+    .bslider { position: relative; height: 10rem; margin: 14rem 12rem 4rem 12rem; border-radius: 999rem; background-color: $line; cursor: pointer; }
+    .bfill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 999rem; background-image: linear-gradient(90deg, #2a7bff, #4db2ff); }
+    .bthumb { position: absolute; top: 50%; width: 24rem; height: 24rem; margin: -12rem 0 0 -12rem; border-radius: 12rem; background-color: #fff; box-shadow: 0 2rem 8rem rgba(0, 0, 0, 0.5); }
+}

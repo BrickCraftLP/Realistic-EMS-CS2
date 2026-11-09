@@ -158,6 +158,8 @@ namespace RealisticEMS
             var queuePos = road.m_Position - math.forward(road.m_Rotation) * gap;
             if (math.distance(em.GetComponentData<Transform>(follower).m_Position.xz, queuePos.xz) < 4f) return; // already in place
             var rl = em.GetComponentData<CarCurrentLane>(leader);
+            // Same road segment: drive-in distance, fine. Elsewhere (other path end of the address) it stays put.
+            if (TooFar(follower, queuePos) && Edge(em.GetComponentData<CarCurrentLane>(follower).m_Lane) != Edge(rl.m_Lane)) return;
             if (!em.HasComponent<Curve>(rl.m_Lane) || !em.HasBuffer<LaneObject>(rl.m_Lane)) return;
 
             float laneLength = math.max(1f, em.GetComponentData<Curve>(rl.m_Lane).m_Length);
@@ -245,12 +247,12 @@ namespace RealisticEMS
                 if (ct < 0.02f || ct > 0.98f) break;
                 if (anchor.ParkingLane != Entity.Null)
                 {
-                    if (!TryParkingSlot(anchor.ParkingLane, anchor.Curve, ct, -anchor.ToRoad, anchor.Forward, e, out var slot)) continue;
+                    if (!TryParkingSlot(anchor.ParkingLane, anchor.Curve, ct, -anchor.ToRoad, anchor.Forward, e, out var slot) || TooFar(e, slot.Pos)) continue;
                     ParkAtCorner(e, Entity.Null, slot, $" hinter {m_Units.CallsignOf(leader)}");
                     return true;
                 }
                 float3 pos = MathUtils.Position(anchor.Curve, ct) + anchor.ToRoad * 0.5f;
-                if (!SpotFree(pos, length)) continue;
+                if (!SpotFree(pos, length) || TooFar(e, pos)) continue;
                 Place(e, pos, anchor.Rot, length);
                 m_Anchors[e] = new CornerSpot { Pos = pos, Rot = anchor.Rot, Curve = anchor.Curve, LaneT = ct, ToRoad = anchor.ToRoad, Forward = anchor.Forward };
                 Mod.log.Info($"{m_Units.CallsignOf(e)} parkt auf Gehsteig hinter {m_Units.CallsignOf(leader)}");
@@ -432,6 +434,7 @@ namespace RealisticEMS
                         if (!SpotFree(pos, length)) continue;
                         candidate = new CornerSpot { Pos = pos, Rot = rot, Curve = laneBez, LaneT = laneT, ToRoad = toRoad, Forward = math.forward(rot) };
                     }
+                    if (TooFar(vehicle, candidate.Pos)) continue;
                     float score = math.distance(candidate.Pos, from) + (parking ? 0f : 1000f); // parking spots before pavement
                     if (score < bestScore) { bestScore = score; best = candidate; }
                 }
@@ -577,6 +580,11 @@ namespace RealisticEMS
             if (em.HasBuffer<LaneObject>(lane.m_Lane)) NetUtils.RemoveLaneObject(em.GetBuffer<LaneObject>(lane.m_Lane), e);
             if (em.HasBuffer<LaneObject>(lane.m_ChangeLane)) NetUtils.RemoveLaneObject(em.GetBuffer<LaneObject>(lane.m_ChangeLane), e);
         }
+
+        // Parking teleports the vehicle; beyond this it visibly vanishes and reappears somewhere else.
+        private const float MaxJump = 30f;
+        private Entity Edge(Entity lane) => EntityManager.HasComponent<Owner>(lane) ? EntityManager.GetComponentData<Owner>(lane).m_Owner : Entity.Null;
+        private bool TooFar(Entity e, float3 pos) => math.distance(EntityManager.GetComponentData<Transform>(e).m_Position.xz, pos.xz) > MaxJump;
 
         /// <summary>Vehicle length plus a small gap.</summary>
         private float Length(Entity e)
