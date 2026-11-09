@@ -1,0 +1,599 @@
+// Leitstelle: a dispatch console inside the CS2 UI. Dark, dense, tabular.
+// Color only carries meaning: urgency level, unit status, load. Everything else is neutral.
+
+$ink: #14181f;
+$ink-2: #5b6370;
+$ink-3: #9aa1ab;
+$line: #eceef1;
+$surface: #f5f6f8;
+$surface-hi: #e9ebef;
+$card: #ffffff;
+$bg: #f2f3f5;
+$accent: #e8473e; // signal red: active menu item, counters
+
+// MPDS levels
+$lv-E: #b3122b;
+$lv-D: #e8473e;
+$lv-C: #f08a24;
+$lv-B: #e8c53a;
+$lv-A: #4fae6a;
+$lv-O: #8c949c;
+
+// unit status
+$s-free: #4fae6a;
+$s-enroute: #f08a24;
+$s-onscene: #e8473e;
+$s-transport: #4a8fe0;
+$s-returning: #8c949c;
+$s-off: rgba(255, 255, 255, 0.2);
+$s-patrol: #8a7cf0; // police on patrol
+
+.panel {
+    width: 1320rem;
+}
+
+// ---- shell: sidebar + page ----
+.shell { display: flex; flex-direction: row; margin: -10rem; background-color: $bg; border-radius: 6rem; }
+
+.sidebar {
+    width: 200rem;
+    padding: 16rem 10rem;
+    background-color: $card;
+    border-right: 1rem solid $line;
+}
+
+.navGroup { margin-bottom: 14rem; }
+
+.navGroupHead, .navItem, .navItemActive {
+    display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+    width: 100%; background: none; border: none; cursor: pointer; text-align: left;
+}
+
+.navGroupHead {
+    padding: 4rem 10rem 6rem 10rem;
+    font-size: 11rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: $ink-3;
+    &:hover { color: $ink-2; }
+}
+
+.caret { font-size: 14rem; }
+
+.navItem, .navItemActive {
+    padding: 8rem 10rem 8rem 18rem;
+    margin-bottom: 2rem;
+    border-radius: 6rem;
+    font-size: 14rem; font-weight: 500; color: $ink-2;
+    transition: background-color 0.15s ease-out, color 0.15s ease-out;
+    &:hover { background-color: $surface; color: $ink; }
+}
+
+.navItemActive { background-color: $surface-hi; color: $ink; font-weight: 700; box-shadow: inset 3rem 0 0 $accent; }
+
+.main { flex: 1; padding: 18rem 20rem 0 20rem; }
+
+.pageHead {
+    margin-bottom: 14rem;
+    h1 { margin: 0; font-size: 26rem; font-weight: 600; color: $ink; }
+    .note { margin-top: 2rem; }
+}
+
+.tabCount {
+    margin-left: 8rem;
+    padding: 1rem 7rem;
+    border-radius: 9rem;
+    background-color: $accent;
+    color: white;
+    font-size: 12rem;
+    font-weight: 700;
+}
+
+.content {
+    height: 680rem;
+    padding: 0 6rem 12rem 2rem;
+}
+
+// ---- Lage ----
+.lage {
+    display: flex;
+    flex-direction: column;
+}
+
+.block {
+    padding: 14rem 16rem 16rem 16rem;
+    margin-bottom: 12rem;
+    background-color: $surface;
+    border-radius: 6rem;
+
+    h2 {
+        margin: 0;
+        font-size: 13rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: $ink-2;
+    }
+}
+
+.blockHead {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10rem;
+}
+
+.figure {
+    font-size: 14rem;
+    color: $ink-2;
+    b { font-size: 22rem; font-weight: 700; color: $ink; margin-right: 4rem; }
+}
+
+.fleet {
+    display: flex;
+    flex-direction: row;
+    height: 14rem;
+    border-radius: 3rem;
+    overflow: hidden;
+    background-color: $surface-hi;
+    > div { height: 100%; margin-right: 2rem; }
+    > div:last-child { margin-right: 0; }
+}
+
+.legend {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-top: 10rem;
+    .num { margin: 0 22rem 0 6rem; color: $ink; }
+}
+
+.note {
+    margin-top: 8rem;
+    font-size: 13rem;
+    color: $ink-3;
+}
+
+.levels {
+    display: flex;
+    flex-direction: row;
+}
+
+.levelCount, .levelZero {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-left: 14rem;
+    font-size: 14rem;
+    font-weight: 700;
+    color: $ink;
+}
+
+.levelZero { color: $ink-3; font-weight: 400; .pip { opacity: 0.35; } }
+
+.pip {
+    width: 9rem;
+    height: 9rem;
+    border-radius: 2rem;
+    margin-right: 5rem;
+}
+
+.callRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 7rem 0;
+    border-top: 1rem solid $line;
+    font-size: 14rem;
+    color: $ink;
+}
+
+.callReason { flex: 1; margin: 0 14rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.callUnit { width: 90rem; color: $ink-2; }
+
+// ---- lists ----
+.toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 10rem;
+    .note { margin: 0 0 0 12rem; }
+}
+
+.chip, .chipOn {
+    padding: 5rem 12rem;
+    border-radius: 14rem;
+    border: 1rem solid $line;
+    background-color: $surface;
+    color: $ink-2;
+    font-size: 13rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease-out, color 0.15s ease-out;
+    &:hover { background-color: $surface-hi; color: $ink; }
+}
+
+.chipOn { background-color: $ink; border-color: $ink; color: white; &:hover { background-color: $ink; color: white; } }
+
+.row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    min-height: 40rem;
+    padding: 0 10rem;
+    border-top: 1rem solid $line;
+    font-size: 14rem;
+    color: $ink;
+    > span { padding-right: 12rem; }
+    &:hover { background-color: $surface; }
+}
+
+.head {
+    min-height: 30rem;
+    border-top: none;
+    font-size: 12rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: $ink-3;
+    &:hover { background-color: transparent; }
+}
+
+// column widths per table (flex basis; Gameface has no table layout)
+.colsVehicle {
+    > span:nth-child(1) { width: 140rem; }
+    > span:nth-child(2) { width: 140rem; }
+    > span:nth-child(3) { width: 100rem; }
+    > span:nth-child(4) { flex: 1; }
+    > span:nth-child(5) { width: 190rem; }
+    > span:nth-child(6) { width: 150rem; }
+}
+
+.colsHospital {
+    > span:nth-child(1) { flex: 1; }
+    > span:nth-child(2) { width: 300rem; }
+    > span:nth-child(3) { width: 110rem; }
+    > span:nth-child(4) { width: 110rem; }
+}
+
+.colsStation {
+    > span:nth-child(1) { flex: 1; }
+    > span:nth-child(2) { width: 260rem; }
+    > span:nth-child(3), > span:nth-child(4), > span:nth-child(5) { width: 100rem; }
+}
+
+.strong { display: flex; flex-direction: column; font-weight: 600; }
+.sub { font-size: 12rem; font-weight: 400; color: $ink-3; margin-top: 1rem; }
+.dim { color: $ink-3; }
+.right { text-align: right; justify-content: flex-end; }
+.num { font-variant-numeric: tabular-nums; }
+.clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ok { color: $s-free; font-weight: 600; }
+.full { color: $lv-D; font-weight: 600; }
+
+.empty {
+    padding: 28rem 12rem;
+    text-align: center;
+    font-size: 14rem;
+    color: $ink-3;
+}
+
+// ---- atoms ----
+.badge {
+    padding: 2rem 7rem;
+    border-radius: 3rem;
+    font-size: 13rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    color: #14171a;
+}
+
+.lvE { background-color: $lv-E; color: white; }
+.lvD { background-color: $lv-D; color: white; }
+.lvC { background-color: $lv-C; }
+.lvB { background-color: $lv-B; }
+.lvA { background-color: $lv-A; }
+.lvO { background-color: $lv-O; }
+
+.status {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    white-space: nowrap;
+    color: $ink;
+}
+
+.dot {
+    width: 8rem;
+    height: 8rem;
+    border-radius: 4rem;
+    margin-right: 8rem;
+}
+
+.sFree { background-color: $s-free; }
+.sEnRoute { background-color: $s-enroute; }
+.sOnScene { background-color: $s-onscene; }
+.sTransport { background-color: $s-transport; }
+.sReturning { background-color: $s-returning; }
+.sOff { background-color: $s-off; }
+.sPatrol { background-color: $s-patrol; }
+
+.bar {
+    flex: 1;
+    height: 8rem;
+    border-radius: 4rem;
+    background-color: $surface-hi;
+    overflow: hidden;
+}
+
+.barFill { height: 100%; border-radius: 4rem; transition: width 0.4s ease-out; }
+.loadOk { background-color: $s-free; }
+.loadHigh { background-color: $lv-C; }
+.loadFull { background-color: $lv-D; }
+
+.barCell {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    .num { width: 44rem; text-align: right; margin-left: 10rem; color: $ink-2; }
+}
+
+// ---- Karte ----
+.map {
+    position: relative;
+    width: 1000rem;
+    height: 560rem;
+    background-color: $surface;
+    border-radius: 6rem;
+    overflow: hidden;
+    cursor: move;
+}
+
+.mapCanvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+
+// Anchor point is the marker center.
+.marker {
+    position: absolute;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    transform: translate(-5rem, -5rem);
+}
+
+.markerLabel {
+    margin-left: 4rem;
+    padding: 0 4rem;
+    border-radius: 2rem;
+    background-color: rgba(255, 255, 255, 0.85);
+    font-size: 11rem;
+    font-weight: 600;
+    color: $ink;
+    white-space: nowrap;
+}
+
+.mkRtw { width: 10rem; height: 10rem; border-radius: 5rem; border: 1rem solid rgba(0, 0, 0, 0.6); }
+.mkNef { width: 8rem; height: 8rem; margin: 1rem; border: 1rem solid rgba(0, 0, 0, 0.6); }
+.mkHospital, .mkHospitalFull { width: 10rem; height: 10rem; border-radius: 2rem; background-color: white; border: 2rem solid $lv-D; }
+.mkHospitalFull { background-color: $lv-D; }
+.mkStation { width: 10rem; height: 10rem; border: 2rem solid $ink; }
+// Police: diamond with a white rim, so it never reads as an RTW even when the status colors match.
+.mkPolice { width: 8rem; height: 8rem; margin: 1rem; border: 1rem solid white; transform: rotate(45deg); }
+.mapLegend { flex-wrap: wrap; }
+
+.legendItem { margin-right: 18rem; font-size: 13rem; color: $ink-2; > span:first-child { margin-right: 6rem; } }
+
+.zoom {
+    display: flex;
+    flex-direction: row;
+    margin-left: auto;
+    > button { margin-left: 6rem; }
+}
+
+// ---- Lage: statistics ----
+.tiles {
+    display: flex;
+    flex-direction: row;
+    margin-bottom: 12rem;
+}
+
+.tile {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 12rem 16rem 13rem 16rem;
+    margin-right: 12rem;
+    background-color: $surface;
+    border-radius: 6rem;
+    &:last-child { margin-right: 0; }
+}
+
+.tileLabel { font-size: 12rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: $ink-2; }
+.tileValue { margin-top: 6rem; font-size: 28rem; font-weight: 700; color: $ink; font-variant-numeric: tabular-nums; }
+.tileUnit { margin-left: 5rem; font-size: 15rem; font-weight: 400; color: $ink-2; }
+.tileNote { margin-top: 3rem; font-size: 12rem; color: $ink-3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.chart { margin-top: 14rem; }
+
+.readout { height: 18rem; font-size: 13rem; color: $ink-2; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+// One column per sample; segments stack bottom-up. Hairline baseline, no grid.
+.columns {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    height: 96rem;
+    margin-top: 4rem;
+    border-bottom: 1rem solid $ink-3;
+}
+
+.col {
+    flex: 1;
+    display: flex;
+    flex-direction: column-reverse;
+    > div { margin-top: 1rem; }
+}
+
+.colGap { margin: 0 1.5rem; > div:first-child { border-radius: 2rem 2rem 0 0; } }
+.colHover { background-color: $surface-hi; }
+
+.segIdle { background-color: $surface-hi; }
+.segNeutral { background-color: $ink-2; }
+
+.axis {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    margin-top: 4rem;
+    font-size: 11rem;
+    color: $ink-3;
+}
+
+.pair {
+    display: flex;
+    flex-direction: row;
+    > .block { flex: 1; margin-right: 12rem; }
+    > .block:last-child { margin-right: 0; }
+}
+
+.countRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 26rem;
+    font-size: 13rem;
+    color: $ink;
+}
+
+.countLabel { display: flex; flex-direction: row; align-items: center; width: 150rem; padding-right: 10rem; }
+.countNum { width: 40rem; text-align: right; font-variant-numeric: tabular-nums; color: $ink-2; }
+
+.histogram {
+    display: flex;
+    flex-direction: row;
+    height: 130rem;
+}
+
+.histCol {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0 8rem;
+}
+
+.histNum { height: 18rem; font-size: 13rem; color: $ink; font-variant-numeric: tabular-nums; }
+.histTrack {
+    flex: 1;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column-reverse;
+    border-bottom: 1rem solid $ink-3;
+    > div { border-radius: 3rem 3rem 0 0; }
+}
+.histLabel { margin-top: 5rem; font-size: 12rem; color: $ink-3; }
+
+// ---- Dashboard ----
+.grid { display: flex; flex-direction: row; align-items: flex-start; }
+.gridLeft { flex: 1.6; margin-right: 14rem; }
+.gridRight { flex: 1; }
+
+.card, .block, .tile {
+    background-color: $card;
+    border: 1rem solid $line;
+    border-radius: 10rem;
+}
+
+.card { padding: 16rem 18rem; margin-bottom: 14rem; }
+
+.cardHead {
+    display: flex; flex-direction: row; justify-content: space-between; align-items: center;
+    margin-bottom: 12rem;
+    h2 { margin: 0; font-size: 16rem; font-weight: 600; color: $ink; }
+}
+
+.link {
+    background: none; border: none; cursor: pointer;
+    font-size: 13rem; font-weight: 600; color: $ink;
+    &:hover { color: $accent; }
+}
+
+.mapCompact { width: 620rem; height: 347rem; }
+
+.mapControls {
+    position: absolute; right: 12rem; bottom: 12rem;
+    display: flex; flex-direction: column;
+    > button {
+        width: 32rem; height: 32rem; margin-top: 6rem;
+        border-radius: 16rem; border: 1rem solid $line; background-color: $card;
+        font-size: 16rem; color: $ink; cursor: pointer;
+        &:hover { background-color: $surface-hi; }
+    }
+}
+
+.colsCall {
+    > span:nth-child(1) { width: 90rem; }
+    > span:nth-child(2) { flex: 1; }
+    > span:nth-child(3) { width: 150rem; }
+    > span:nth-child(4) { width: 70rem; }
+    > span:nth-child(5) { width: 24rem; padding-right: 0; color: $ink-3; }
+}
+
+.callToggle { width: 100%; background: none; border: none; border-top: 1rem solid $line; cursor: pointer; text-align: left; }
+
+.callUnits { padding: 4rem 10rem 10rem 100rem; background-color: $surface; }
+.callUnitRow {
+    display: flex; flex-direction: row; align-items: center; padding: 6rem 0; font-size: 13rem; color: $ink;
+    > span:nth-child(1) { width: 150rem; }
+    > span:nth-child(2) { flex: 1; padding-right: 12rem; color: $ink-2; }
+}
+
+// Status as a soft pill: tinted background via opacity layer is not supported everywhere, so use solid + white text.
+.pill { padding: 3rem 9rem; border-radius: 4rem; font-size: 12rem; font-weight: 600; color: white; white-space: nowrap; }
+
+.alert {
+    display: flex; flex-direction: row; align-items: flex-start;
+    padding: 10rem 0;
+    border-top: 1rem solid $line;
+    &:first-of-type { border-top: none; }
+}
+
+.alertIcon {
+    width: 26rem; height: 26rem; margin-right: 12rem;
+    border-radius: 13rem; text-align: center; line-height: 26rem;
+    font-size: 14rem; font-weight: 700; color: white;
+}
+
+.alertBody { flex: 1; min-width: 0; }
+.alertTitle { display: flex; flex-direction: row; align-items: center; font-size: 14rem; font-weight: 600; color: $ink; }
+.alertText { margin-top: 2rem; font-size: 12rem; color: $ink-2; }
+
+.sevTag { margin-left: 8rem; padding: 1rem 6rem; border-radius: 4rem; font-size: 11rem; font-weight: 600; }
+.sevTag_high { background-color: #fde8e7; color: #c0362e; }
+.sevTag_medium { background-color: #fdf0e1; color: #b8641a; }
+.sevTag_low { background-color: #e6f4ea; color: #2f7d47; }
+
+.sev_high { background-color: $lv-D; }
+.sev_medium { background-color: $lv-C; }
+.sev_low { background-color: $lv-A; }
+
+// ---- Settings ----
+.setting {
+    display: flex; flex-direction: row; align-items: center;
+    padding: 12rem 0;
+    border-top: 1rem solid $line;
+}
+
+.settingText { flex: 1; padding-right: 24rem; }
+.settingLabel { font-size: 14rem; font-weight: 600; color: $ink; }
+.settingDesc { margin-top: 3rem; font-size: 12rem; line-height: 1.4; color: $ink-2; }
+
+.switch, .switchOn {
+    width: 40rem; height: 22rem; padding: 0;
+    border: none; border-radius: 11rem; cursor: pointer;
+    background-color: $surface-hi;
+    transition: background-color 0.15s ease-out;
+    > span { display: block; width: 18rem; height: 18rem; margin: 2rem; border-radius: 9rem; background-color: white; transition: transform 0.15s ease-out; }
+}
+
+.switchOn { background-color: $s-free; > span { transform: translateX(18rem); } }
+
+.stepper { display: flex; flex-direction: row; align-items: center; }
+.stepValue { width: 48rem; text-align: center; font-size: 14rem; font-weight: 600; color: $ink; font-variant-numeric: tabular-nums; }

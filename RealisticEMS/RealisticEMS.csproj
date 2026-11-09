@@ -1,0 +1,40 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.props" />
+  <Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.targets" />
+
+  <PropertyGroup>
+    <AssemblyName>RealisticEMS</AssemblyName>
+    <RootNamespace>RealisticEMS</RootNamespace>
+    <Version>26.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Source: https://www.einsatzcodes.at/export.php (Einsatzcodes Wien). Edit the CSV to change codes/units. -->
+    <EmbeddedResource Include="Data\einsatzcodes.csv" LogicalName="RealisticEMS.Data.einsatzcodes.csv" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Game" Private="false" />
+    <Reference Include="Colossal.Core" Private="false" />
+    <Reference Include="Colossal.Logging" Private="false" />
+    <Reference Include="Colossal.IO.AssetDatabase" Private="false" />
+    <Reference Include="Colossal.Localization" Private="false" />
+    <Reference Include="Colossal.UI.Binding" Private="false" />
+    <Reference Include="Colossal.Mathematics" Private="false" />
+    <Reference Include="Unity.Entities" Private="false" />
+    <Reference Include="Unity.Collections" Private="false" />
+    <Reference Include="Unity.Mathematics" Private="false" />
+    <Reference Include="UnityEngine.CoreModule" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="UI\**" />
+    <None Remove="UI\**" />
+  </ItemGroup>
+
+  <!-- DeployWIP wipes the Mods folder, so the UI bundle (UI/, webpack -> same folder) is rebuilt right after it. -->
+  <Target Name="BuildUI" AfterTargets="DeployWIP">
+    <Exec Command="npm install --no-audit --no-fund" WorkingDirectory="UI" Condition="!Exists('UI\node_modules')" />
+    <Exec Command="npm run build" WorkingDirectory="UI" EnvironmentVariables="CSII_USERDATAPATH=$(UserDataPath)" />
+  </Target>
+</Project>

@@ -32,9 +32,6 @@ This mod makes EMS behave more like a real system. It has dedicated depots, code
 ### On scene
 - **On-scene care time**: the crew stays with the patient for a configurable number of game minutes before the patient boards. With an NEF involved, care starts when both are there. If the NEF does not arrive within the maximum wait, the crew starts alone. Driving time doesn't count.
 - **Scene parking**: vehicles park off the road, on the sidewalk, in parking lanes or at intersection corners. A free parking spot is preferred over the sidewalk. Angled parking keeps the rear out of the lane.
-- <img width="1920" height="1080" alt="08-November-14-14-15-05" src="https://github.com/user-attachments/assets/7318f415-161f-466a-aa6f-185712d178a8" />
-- <img width="1920" height="1080" alt="08-November-14-12-51-04" src="https://github.com/user-attachments/assets/f6b25c4b-b44b-457a-9f09-e9a3c277086c" />
-
 
 ### Emergency driving
 Only used by vehicles with lights on:
@@ -47,9 +44,6 @@ Only used by vehicles with lights on:
 - **Drive-through**: after N seconds still blocked, drive through the blocker as a last resort.
 - **Stuck guard**: prevents vanilla from deleting an ambulance that is only briefly deadlocked. A truly trapped one is still removed after about 2 minutes.
 - Pedestrian streets: vehicles stop where they are, with no driving aids.
-- <img width="1920" height="1080" alt="08-November-14-11-50-02" src="https://github.com/user-attachments/assets/de449d9e-e435-4218-a493-0a2c6d6406fd" />
-- <img width="1920" height="1080" alt="08-November-14-15-15-08" src="https://github.com/user-attachments/assets/24c98ed2-5194-4eb9-9fd4-1efd9630dfb2" />
-
 
 ## How it works
 
@@ -69,6 +63,14 @@ Settings live in [Setting.cs](RealisticEMS/Setting.cs). German and English are i
 - Subscribe on Paradox Mods (mod ID `166759`).
 - Requires Cities: Skylines II, game version `1.*`.
 
-S.csproj -c Release
+## Building
 
-Credits Call-codes: [Einsatzcodes Wien](https://einsatzcodes.at), Stand 06.01.2025.
+Requires the CS2 modding toolchain (.NET Framework 4.8 target) and Node for the UI in `RealisticEMS/UI`.
+
+```
+dotnet build RealisticEMS/RealisticEMS.csproj -c Release
+```
+
+## Credits
+
+Call codes: Einsatzcodes Wien (einsatzcodes.at), Stand 06.01.2025.
