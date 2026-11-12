@@ -1,3 +1,4 @@
+using Colossal.Entities;
 using Colossal.UI.Binding;
 using Game.Buildings;
 using Game.Citizens;
@@ -5,7 +6,9 @@ using Game.Common;
 using Game.Prefabs;
 using Game.Simulation;
 using Game.Tools;
+using Game.Rendering;
 using Game.UI;
+using Game.UI.InGame;
 using Game.Vehicles;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,6 +18,7 @@ using Unity.Mathematics;
 using Ambulance = Game.Vehicles.Ambulance;
 using Hospital = Game.Buildings.Hospital;
 using PoliceCar = Game.Vehicles.PoliceCar;
+using FireEngine = Game.Vehicles.FireEngine;
 using Transform = Game.Objects.Transform;
 
 namespace RealisticEMS
@@ -27,12 +31,16 @@ namespace RealisticEMS
     {
         private const string Group = "realisticEMS";
         private ValueBinding<bool> m_Debug, m_Open, m_Intro, m_News, m_NewsBug;
-        private RawValueBinding m_State, m_RoadsBinding, m_Settings;
-        private EntityQuery m_Ambulances, m_Hospitals, m_Roads, m_Police, m_Healthy;
+        private RawValueBinding m_State, m_RoadsBinding, m_Settings, m_BuildingsBinding, m_GroundBinding;
+        private EntityQuery m_Ambulances, m_Hospitals, m_Roads, m_Police, m_Fire, m_Healthy, m_Buildings, m_Trees, m_Parks;
         private int m_RoadCount = -1;
+        private bool m_Map3dOpen;
+        private WaterSystem m_Water;
+        private const int GroundN = 256; private const float GroundCell = 14336f / GroundN; // whole playable map, 56 m cells // buildings are only collected while the 3D map is open
         private NameSystem m_NameSystem;
         private UnitNamingSystem m_Units;
         private SimulationSystem m_Sim;
+        private TimeSystem m_Time;
         private int m_Frame;
 
         protected override void OnCreate()
@@ -41,19 +49,32 @@ namespace RealisticEMS
             m_NameSystem = World.GetOrCreateSystemManaged<NameSystem>();
             m_Units = World.GetOrCreateSystemManaged<UnitNamingSystem>();
             m_Sim = World.GetOrCreateSystemManaged<SimulationSystem>();
+            m_Time = World.GetOrCreateSystemManaged<TimeSystem>();
             m_Ambulances = GetEntityQuery(ComponentType.ReadOnly<Ambulance>(), ComponentType.ReadOnly<Owner>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
             m_Hospitals = GetEntityQuery(ComponentType.ReadOnly<Hospital>(), ComponentType.ReadOnly<PrefabRef>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
             m_Police = GetEntityQuery(ComponentType.ReadOnly<PoliceCar>(), ComponentType.ReadOnly<Owner>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
+            m_Fire = GetEntityQuery(ComponentType.ReadOnly<FireEngine>(), ComponentType.ReadOnly<Owner>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
             AddBinding(m_Open = new ValueBinding<bool>(Group, "open", false));
             m_Roads = GetEntityQuery(ComponentType.ReadOnly<Game.Net.Edge>(), ComponentType.ReadOnly<Game.Net.Curve>(), ComponentType.ReadOnly<Game.Net.Road>(),
                 ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
             AddBinding(m_State = new RawValueBinding(Group, "state", Write));
             AddBinding(m_RoadsBinding = new RawValueBinding(Group, "roads", WriteRoads));
             AddBinding(m_Debug = new ValueBinding<bool>(Group, "debug", false));
+            // 3D map (map3d.tsx): every building as a block. Only recomputed when the user presses Refresh.
+            m_Buildings = GetEntityQuery(ComponentType.ReadOnly<Building>(), ComponentType.ReadOnly<Transform>(), ComponentType.ReadOnly<PrefabRef>(),
+                ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
+            AddBinding(m_BuildingsBinding = new RawValueBinding(Group, "buildings", WriteBuildings));
+            m_Trees = GetEntityQuery(ComponentType.ReadOnly<Game.Objects.Tree>(), ComponentType.ReadOnly<Transform>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
+            m_Parks = GetEntityQuery(ComponentType.ReadOnly<Game.Buildings.Park>(), ComponentType.ReadOnly<Transform>(), ComponentType.ReadOnly<PrefabRef>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
+            m_Water = World.GetOrCreateSystemManaged<WaterSystem>();
+            AddBinding(m_GroundBinding = new RawValueBinding(Group, "ground", WriteGround));
+            AddBinding(new TriggerBinding(Group, "refreshMap3d", () => { m_Map3dOpen = true; m_BuildingsBinding.Update(); m_GroundBinding.Update(); m_RoadsBinding.Update(); }));
+            AddBinding(new TriggerBinding(Group, "closeMap3d", () => { m_Map3dOpen = false; m_BuildingsBinding.Update(); m_GroundBinding.Update(); })); // sends [] so the UI drops the data
             AddBinding(new TriggerBinding(Group, "toggle", () => { m_Debug.Update(DebugUnlocked); m_Open.Update(!m_Open.value); m_State.Update(); m_RoadCount = -1; }));
             m_Healthy = GetEntityQuery(ComponentType.ReadOnly<Citizen>(), ComponentType.ReadOnly<CurrentBuilding>(), ComponentType.Exclude<HealthProblem>(),
                 ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
             AddBinding(new TriggerBinding<string, int>(Group, "debugCall", DebugCall));
+            AddBinding(new TriggerBinding<int, int>(Group, "jumpTo", JumpTo));
             AddBinding(m_Settings = new RawValueBinding(Group, "settings", WriteSettings));
             AddBinding(new TriggerBinding<string, int>(Group, "setSetting", SetSetting));
             // Setup screen (intro.tsx): opens on the first game load, again from the Dashboard.
@@ -88,6 +109,19 @@ namespace RealisticEMS
             if (mode != Game.GameMode.Game) return;
             if (!Mod.Setting.IntroSeen) { m_Settings.Update(); m_Intro.Update(true); }
             else if (NewsDue) m_News.Update(true);
+        }
+
+        /// <summary>Calls tab: select the vehicle and let the orbit camera follow it.</summary>
+        private void JumpTo(int index, int version)
+        {
+            var e = new Entity { Index = index, Version = version };
+            if (!EntityManager.Exists(e)) return;
+            World.GetExistingSystemManaged<SelectedInfoUISystem>()?.SetSelection(e);
+            var cam = World.GetExistingSystemManaged<CameraUpdateSystem>();
+            if (cam?.orbitCameraController == null) return;
+            cam.orbitCameraController.followedEntity = e;
+            cam.orbitCameraController.TryMatchPosition(cam.activeCameraController);
+            cam.activeCameraController = cam.orbitCameraController;
         }
 
         private static bool NewsDue => Mod.Setting.LastSeenVersion != Mod.Version;
@@ -200,6 +234,63 @@ namespace RealisticEMS
             w.ArrayEnd();
         }
 
+        // 7 ints per building: x, z, halfWidth, halfDepth, height, yaw in centidegrees, kind (0 = generic, 1 = hospital, 2 = EMS depot).
+        private void WriteBuildings(IJsonWriter w)
+        {
+            if (!m_Map3dOpen) { w.ArrayBegin(0u); w.ArrayEnd(); return; }
+            using var ents = m_Buildings.ToEntityArray(Allocator.Temp);
+            var em = EntityManager;
+            var list = new List<int>(ents.Length * 7);
+            foreach (var e in ents)
+            {
+                var prefab = em.GetComponentData<PrefabRef>(e).m_Prefab;
+                if (!em.HasComponent<ObjectGeometryData>(prefab)) continue;
+                var size = em.GetComponentData<ObjectGeometryData>(prefab).m_Size;
+                var t = em.GetComponentData<Transform>(e);
+                var f = math.mul(t.m_Rotation, new float3(0, 0, 1));
+                int kind = !em.HasComponent<Hospital>(e) ? 0 : em.HasBuffer<Patient>(e) ? 1 : 2; // depot = hospital without beds, as DepotOnlyDispatchSystem; // ponytail: no zone colours yet, add a kind when wanted
+                list.Add((int)t.m_Position.x); list.Add((int)t.m_Position.z);
+                list.Add(math.max(1, (int)(size.x / 2))); list.Add(math.max(1, (int)(size.z / 2)));
+                list.Add(math.max(3, (int)size.y)); // flat props still get a visible block
+                list.Add((int)(math.degrees(math.atan2(f.x, f.z)) * 100)); list.Add(kind);
+            }
+            w.ArrayBegin((uint)list.Count);
+            foreach (var v in list) w.Write(v);
+            w.ArrayEnd();
+        }
+
+        // Ground grid for the 3D map: one char per cell, row-major from (-7168, -7168): '0' land, '1' water, '2' green (forest / park).
+        private void WriteGround(IJsonWriter w)
+        {
+            if (!m_Map3dOpen) { w.Write(""); return; }
+            var cells = new char[GroundN * GroundN];
+            for (int i = 0; i < cells.Length; i++) cells[i] = '0';
+            int Cell(float x, float z) { int cx = (int)((x + 7168f) / GroundCell), cz = (int)((z + 7168f) / GroundCell); return cx < 0 || cz < 0 || cx >= GroundN || cz >= GroundN ? -1 : cz * GroundN + cx; }
+            // Greenery: cells with a few trees become forest, park lots are filled.
+            var trees = new byte[cells.Length];
+            using (var tt = m_Trees.ToComponentDataArray<Transform>(Allocator.Temp))
+                foreach (var t in tt) { int c = Cell(t.m_Position.x, t.m_Position.z); if (c >= 0 && trees[c] < 255 && ++trees[c] == 4) cells[c] = '2'; }
+            using (var parks = m_Parks.ToEntityArray(Allocator.Temp))
+                foreach (var e in parks)
+                {
+                    var p = EntityManager.GetComponentData<Transform>(e).m_Position;
+                    var pf = EntityManager.GetComponentData<PrefabRef>(e).m_Prefab;
+                    float r = EntityManager.HasComponent<ObjectGeometryData>(pf) ? math.cmax(EntityManager.GetComponentData<ObjectGeometryData>(pf).m_Size.xz) / 2 : GroundCell / 2;
+                    for (float x = p.x - r; x <= p.x + r; x += GroundCell / 2)
+                        for (float z = p.z - r; z <= p.z + r; z += GroundCell / 2) { int c = Cell(x, z); if (c >= 0) cells[c] = '2'; }
+                }
+            // Water wins over green. ponytail: point sample per cell centre, finer grid if shorelines look too blocky.
+            var water = m_Water.GetSurfaceData(out var deps);
+            deps.Complete();
+            for (int cz = 0; cz < GroundN; cz++)
+                for (int cx = 0; cx < GroundN; cx++)
+                {
+                    var pos = new float3(-7168f + (cx + 0.5f) * GroundCell, 0, -7168f + (cz + 0.5f) * GroundCell);
+                    if (WaterUtils.SampleDepth(ref water, pos) > 0.5f) cells[cz * GroundN + cx] = '1';
+                }
+            w.Write(new string(cells));
+        }
+
         private void Pos(IJsonWriter w, Entity e)
         {
             var p = EntityManager.HasComponent<Transform>(e) ? EntityManager.GetComponentData<Transform>(e).m_Position : default;
@@ -256,6 +347,26 @@ namespace RealisticEMS
 
         private static bool OnCall(string status) => status == "Anfahrt" || status == "am Einsatzort" || status == "Transport";
 
+        /// <summary>Can take a new call: parked, on patrol, or returning when AvailableOnlyAtDepot is off.</summary>
+        private static bool Available(string status) => status == "frei" || status == "Streife" || (status == "Rückfahrt" && !Mod.Setting.AvailableOnlyAtDepot);
+
+        private string FireStatus(Entity e)
+        {
+            var f = EntityManager.GetComponentData<FireEngine>(e);
+            if (EntityManager.HasComponent<ParkedCar>(e)) return (f.m_State & FireEngineFlags.Disabled) != 0 ? "ausser Dienst" : "frei";
+            if (ResponderDispatchSystem.HeldAt.ContainsKey(e)) return "am Einsatzort";
+            if ((f.m_State & FireEngineFlags.Returning) != 0) return "Rückfahrt";
+            return (f.m_State & FireEngineFlags.Extinguishing) != 0 ? "am Einsatzort" : "Anfahrt";
+        }
+
+        private void WriteStation(IJsonWriter w, Entity building, string kind, List<string> statuses)
+        {
+            w.TypeBegin("ems.Station");
+            Prop(w, "name", Name(building)); Prop(w, "kind", kind); Prop(w, "total", statuses.Count);
+            Prop(w, "free", statuses.Count(Available)); Prop(w, "onCall", statuses.Count(OnCall)); Pos(w, building);
+            w.TypeEnd();
+        }
+
         private void Write(IJsonWriter w)
         {
             var em = EntityManager;
@@ -290,7 +401,8 @@ namespace RealisticEMS
                 var patient = r.a.m_TargetPatient;
                 if (patient == Entity.Null && nef) patient = NefDispatchSystem.NefByPatient.FirstOrDefault(kv => kv.Value == r.e).Key;
                 Prop(w, "call", patient.Index);
-                Prop(w, "nef", nef); Pos(w, r.e);
+                var info = CallInfo(patient); Prop(w, "callNo", info.no); Prop(w, "address", info.addr);
+                Prop(w, "nef", nef); Prop(w, "id", r.e.Index); Prop(w, "ver", r.e.Version); Pos(w, r.e);
                 w.TypeEnd();
             }
             w.ArrayEnd();
@@ -305,18 +417,20 @@ namespace RealisticEMS
             }
             w.ArrayEnd();
 
-            w.PropertyName("stations"); w.ArrayBegin((uint)depots.Count);
-            foreach (var d in depots)
-            {
-                var own = rows.Where(r => r.owner == d).ToList();
-                w.TypeBegin("ems.Station");
-                Prop(w, "name", Name(d)); Prop(w, "total", own.Count); Prop(w, "free", own.Count(r => r.status == "frei"));
-                Prop(w, "onCall", own.Count(r => r.status != "frei" && r.status != "Rückfahrt" && r.status != "ausser Dienst")); Pos(w, d);
-                w.TypeEnd();
-            }
+            // One row per building and vehicle kind: rtw / nef (depots and hospitals), police, fire.
+            using var police = m_Police.ToEntityArray(Allocator.Temp);
+            using var fire = m_Fire.ToEntityArray(Allocator.Temp);
+            var stations = rows.GroupBy(r => (r.owner, kind: NefDispatchSystem.IsNef(em, r.e) ? "nef" : "rtw"))
+                .Select(g => (g.Key.owner, g.Key.kind, statuses: g.Select(r => r.status).ToList()))
+                .Concat(police.Where(p => !NefDispatchSystem.IsNef(em, p)).GroupBy(p => em.GetComponentData<Owner>(p).m_Owner)
+                    .Select(g => (owner: g.Key, kind: "police", statuses: g.Select(p => PoliceStatus(em, p, em.GetComponentData<PoliceCar>(p), em.HasComponent<ParkedCar>(p))).ToList())))
+                .Concat(fire.GroupBy(f => em.GetComponentData<Owner>(f).m_Owner)
+                    .Select(g => (owner: g.Key, kind: "fire", statuses: g.Select(FireStatus).ToList())))
+                .ToList();
+            w.PropertyName("stations"); w.ArrayBegin((uint)stations.Count);
+            foreach (var st in stations) WriteStation(w, st.owner, st.kind, st.statuses);
             w.ArrayEnd();
 
-            using var police = m_Police.ToEntityArray(Allocator.Temp);
             w.PropertyName("police"); w.ArrayBegin((uint)police.Length);
             foreach (var p in police)
             {
@@ -346,19 +460,45 @@ namespace RealisticEMS
 
         private const uint TrackFrames = 64, SampleFrames = 1024; // 256 samples x 1024 frames = one game day
         private const int HistoryLength = 256, ResponseLength = 200;
-        private readonly Queue<int[]> m_History = new Queue<int[]>(); // per sample: onCall, returning, total, bedsUsed, bedsTotal, new calls
+        private readonly Queue<int[]> m_History = new Queue<int[]>(); // per sample: onCall, returning, total, bedsUsed, bedsTotal, new calls, then new calls per level (E D C B A O)
         private readonly Dictionary<Entity, (Entity patient, uint since, bool counted)> m_Dispatch = new Dictionary<Entity, (Entity, uint, bool)>(); // RTW -> current call
         private readonly int[] m_CallsByLevel = new int[6]; // E D C B A O, the order of the UI
+        private readonly int[] m_SampleLevels = new int[6]; // same, for the current sample only
         private readonly Dictionary<string, int> m_Reasons = new Dictionary<string, int>();
         private readonly List<int> m_Response = new List<int>(); // game minutes from alarm to on scene, most recent last
         private int m_TotalCalls, m_SampleCalls;
+
+        // Call number R<yy><counter>: in-game year, counter 0001..1000, restarts every in-game year. Assigned once per patient while the call is active.
+        // ponytail: the counter is not saved, so after loading a save it restarts at 0001 for the current year.
+        private readonly Dictionary<Entity, (string no, string addr)> m_CallInfo = new Dictionary<Entity, (string, string)>();
+        private int m_CallYear = -1, m_CallCounter;
+
+        private (string no, string addr) CallInfo(Entity patient)
+        {
+            if (patient == Entity.Null) return ("", "");
+            if (m_CallInfo.TryGetValue(patient, out var ci)) return ci;
+            int year = m_Time.GetCurrentDateTime().Year;
+            if (year != m_CallYear) { m_CallYear = year; m_CallCounter = 0; }
+            m_CallCounter = m_CallCounter % 1000 + 1;
+            ci = ($"R{year % 100:00}{m_CallCounter:0000}", AddressOf(patient));
+            m_CallInfo[patient] = ci;
+            return ci;
+        }
+
+        /// <summary>Street + house number of the building the patient is in; empty when outside.</summary>
+        private string AddressOf(Entity patient)
+        {
+            var em = EntityManager;
+            if (!em.TryGetComponent(patient, out CurrentBuilding cb) || !BuildingUtils.GetAddress(em, cb.m_CurrentBuilding, out var road, out var number)) return "";
+            return $"{Name(road)} {number}";
+        }
         private uint m_LastTrack, m_LastSample;
 
         protected override void OnGamePreload(Colossal.Serialization.Entities.Purpose purpose, Game.GameMode mode)
         {
             base.OnGamePreload(purpose, mode);
-            m_History.Clear(); m_Dispatch.Clear(); Ampds.Forced.Clear(); m_Reasons.Clear(); m_Response.Clear();
-            System.Array.Clear(m_CallsByLevel, 0, m_CallsByLevel.Length);
+            m_History.Clear(); m_Dispatch.Clear(); m_CallInfo.Clear(); m_CallYear = -1; m_CallCounter = 0; Ampds.Forced.Clear(); m_Reasons.Clear(); m_Response.Clear();
+            System.Array.Clear(m_CallsByLevel, 0, m_CallsByLevel.Length); System.Array.Clear(m_SampleLevels, 0, m_SampleLevels.Length);
             m_TotalCalls = m_SampleCalls = 0;
         }
 
@@ -377,11 +517,12 @@ namespace RealisticEMS
                 {
                     d = (a.m_TargetPatient, now, false);
                     m_TotalCalls++; m_SampleCalls++;
+                    CallInfo(a.m_TargetPatient);
                 }
                 // UnitNamingSystem assigns the code a few frames after the dispatch.
                 if (!d.counted && m_Units.TryGetCode(e, out var code) && code != null)
                 {
-                    m_CallsByLevel[(int)AmpdsLevel.Echo - (int)code.Level]++;
+                    m_CallsByLevel[(int)AmpdsLevel.Echo - (int)code.Level]++; m_SampleLevels[(int)AmpdsLevel.Echo - (int)code.Level]++;
                     m_Reasons[code.Reason] = (m_Reasons.TryGetValue(code.Reason, out var n) ? n : 0) + 1;
                     d.counted = true;
                 }
@@ -394,6 +535,9 @@ namespace RealisticEMS
                 m_Dispatch[e] = d;
             }
             foreach (var gone in m_Dispatch.Keys.Where(e => !seen.Contains(e)).ToList()) m_Dispatch.Remove(gone);
+            var live = new HashSet<Entity>(m_Dispatch.Values.Select(d => d.patient)); // finished calls drop their number
+            foreach (var p in NefDispatchSystem.NefByPatient.Keys) live.Add(p);
+            foreach (var gone in m_CallInfo.Keys.Where(p => !live.Contains(p)).ToList()) m_CallInfo.Remove(gone);
         }
 
         private void Sample()
@@ -402,8 +546,8 @@ namespace RealisticEMS
             var (rows, hospitals, _) = Collect();
             var rtws = rows.Where(r => !NefDispatchSystem.IsNef(em, r.e)).ToList();
             m_History.Enqueue(new[] { rtws.Count(r => OnCall(r.status)), rtws.Count(r => r.status == "Rückfahrt"), rtws.Count,
-                hospitals.Sum(h => h.used), hospitals.Sum(h => h.beds), m_SampleCalls });
-            m_SampleCalls = 0;
+                hospitals.Sum(h => h.used), hospitals.Sum(h => h.beds), m_SampleCalls }.Concat(m_SampleLevels).ToArray());
+            m_SampleCalls = 0; System.Array.Clear(m_SampleLevels, 0, m_SampleLevels.Length);
             while (m_History.Count > HistoryLength) m_History.Dequeue();
         }
 

@@ -34,14 +34,14 @@ This mod makes EMS behave more like a real system. It has dedicated depots, code
 - **Scene parking**: vehicles park off the road, on the sidewalk, in parking lanes or at intersection corners. A free parking spot is preferred over the sidewalk. Angled parking keeps the rear out of the lane.
 
 ### Emergency driving
-Only used by vehicles with lights on:
+Used by every vehicle with lights on: ambulance, emergency doctor (NEF), police and fire brigade. Each aid has one toggle that covers all of them.
+- **Rettungsgasse on highways and multi-lane roads**: on highways, every traffic jam forms the gap, emergency vehicle or not. On other multi-lane roads it forms as soon as traffic slows and an emergency vehicle is coming along the route. The gap runs between the left lane and all other lanes (Austrian rule). The left lane moves left, every other lane moves right, trucks included. The emergency vehicle moves into the gap from any lane; if it is still blocked there for 3 s, it drives past the obstacle. Cars next to it stop and drive on once it has passed.
+- **One lane per direction**: cars ahead pull to the kerb, oncoming traffic too, and the vehicle passes over the centre line. If the road is too narrow, the queue turns off at the next junction instead.
+- **Oncoming overtake**: trucks in the queue, or slow traffic with a free oncoming lane: the oncoming lane is closed and the vehicle overtakes on it.
 - Push blocking vehicles immediately instead of waiting 5 seconds.
-- Change lanes around a blocked lane.
-- Turn from any lane.
+- Change to a free lane, merge back, or turn from any lane.
 - Clear red lights by holding the signal green, up to a configurable number of cars.
-- **Emergency corridor**: traffic stops and moves to the edges and the ambulance passes between.
-- **Oncoming overtake**: pass slow traffic or trucks on the oncoming lane when it is free (fire engines too).
-- **Drive-through**: after N seconds still blocked, drive through the blocker as a last resort.
+- Left-hand traffic cities are mirrored automatically.
 - **Stuck guard**: prevents vanilla from deleting an ambulance that is only briefly deadlocked. A truly trapped one is still removed after about 2 minutes.
 - Pedestrian streets: vehicles stop where they are, with no driving aids.
 
@@ -54,7 +54,7 @@ The mod avoids patching vanilla Burst jobs. It adds ECS systems that run right a
 | Depot-only dispatch | Clear `HasAvailableAmbulances` on hospitals and mark returning ambulances `Disabled` so vanilla won't dispatch them (`DepotOnlyDispatchSystem`, `AmbulanceReturnSystem`) |
 | Skip full hospitals | Clear a hospital's `CanCure*` flags after vanilla recomputes them, so pathfinding never targets it (`HospitalSelectionSystem`) |
 | On-scene care | Clear the ambulance's `AtTarget` flag so patients don't board yet (`OnSceneCareSystem`, `CrewHoldSystem`) |
-| Emergency driving | Set vanilla's own blocker, lane-change and ignore-blocker flags each frame (`EmergencyLaneSystem`, `SignalOverrideSystem`) |
+| Emergency driving | Set vanilla's own blocker, lane-change, lane-position and max-speed fields each frame (`Driving/`: `EmergencyLaneSystem`, `Corridor`, `Manoeuvres`, `LaneOps`; `SignalOverrideSystem`) |
 
 Settings live in [Setting.cs](RealisticEMS/Setting.cs). German and English are included.
 
@@ -72,5 +72,7 @@ dotnet build RealisticEMS/RealisticEMS.csproj -c Release
 ```
 
 ## Credits
+
+- Icons: [Google Material Icons](https://github.com/google/material-design-icons), Apache License 2.0 (inlined as SVG, nothing loaded from Google). License text in [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).
 
 Call codes: Einsatzcodes Wien (einsatzcodes.at), Stand 06.01.2025.

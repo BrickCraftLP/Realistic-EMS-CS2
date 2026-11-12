@@ -193,16 +193,18 @@ namespace RealisticEMS
             m_Missions.TryGetValue(nef, out var mission);
             if (mission != null) mission.Frames += 16;
 
-            if ((a.m_State & AmbulanceFlags.Returning) != 0 && mission != null && mission.Frames <= 64
-                && rtwByPatient.TryGetValue(mission.Patient, out var waitingRtw)
-                && (em.GetComponentData<Ambulance>(waitingRtw).m_State & (AmbulanceFlags.Transporting | AmbulanceFlags.Returning)) == 0)
+            bool noRoute = (a.m_State & AmbulanceFlags.Returning) != 0 && mission != null && mission.Frames <= 64
+                && rtwByPatient.TryGetValue(mission.Patient, out var waitingRtw) && em.Exists(waitingRtw)
+                && (em.GetComponentData<Ambulance>(waitingRtw).m_State & (AmbulanceFlags.Transporting | AmbulanceFlags.Returning)) == 0;
+            if (noRoute || (mission != null && (a.m_State & AmbulanceFlags.Dispatched) != 0 && StuckAtStart(nef, mission)))
             {
-                // Sent home right after spawning: vanilla found no route from this hospital. Use another one.
+                // Sent home right after spawning (vanilla found no route), or frozen in its bay at the hospital
+                // (still on the parking lane, no navigation lanes): use another hospital.
                 m_NoStart.Add(mission.Hospital);
                 m_Missions.Remove(nef);
                 if (!m_Pending.ContainsKey(mission.Patient)) m_Pending[mission.Patient] = (mission.Location, 0);
                 em.AddComponent<Deleted>(nef);
-                Mod.log.Warn($"NEF {nef.Index}: kann nicht von Spital {mission.Hospital.Index} losfahren (keine Route), versuche anderes Spital");
+                Mod.log.Warn($"NEF {nef.Index}: kann nicht von Spital {mission.Hospital.Index} losfahren ({(noRoute ? "keine Route" : "steht im Stellplatz")}), versuche anderes Spital");
                 return;
             }
             if ((a.m_State & AmbulanceFlags.Returning) != 0)
@@ -230,10 +232,26 @@ namespace RealisticEMS
             ApplyColors(nef);
         }
 
+        /// <summary>
+        /// Seen in logs: an NEF sometimes never leaves its hospital bay. It stays on the parking lane with no navigation
+        /// lanes and no blocker. Counts after ~20 s, only near its own hospital (an NEF waiting on scene looks the same).
+        /// </summary>
+        private bool StuckAtStart(Entity nef, Mission m)
+        {
+            var em = EntityManager;
+            if (m.Frames < 1200 || !em.HasComponent<CarCurrentLane>(nef) || !em.HasComponent<Transform>(m.Hospital)) return false;
+            if ((em.GetComponentData<CarCurrentLane>(nef).m_LaneFlags & Game.Vehicles.CarLaneFlags.ParkingSpace) == 0) return false;
+            if (em.HasBuffer<CarNavigationLane>(nef) && em.GetBuffer<CarNavigationLane>(nef).Length > 0) return false;
+            if (em.HasComponent<Moving>(nef) && math.length(em.GetComponentData<Moving>(nef).m_Velocity) > 0.5f) return false;
+            return math.distance(em.GetComponentData<Transform>(nef).m_Position, em.GetComponentData<Transform>(m.Hospital).m_Position) < 200f;
+        }
+
         /// <summary>When the ambulance leaves for hospital: roll whether the doctor follows to the same hospital.</summary>
         private void MaybeEscort(Entity nef, Mission m, Entity rtw)
         {
             var em = EntityManager;
+            // Either vehicle can be destroyed between the lookup and here (despawned, deleted by the player).
+            if (!em.Exists(nef) || !em.Exists(rtw) || !em.HasComponent<Ambulance>(nef) || !em.HasComponent<Ambulance>(rtw) || !em.HasComponent<Target>(rtw)) return;
             var a = em.GetComponentData<Ambulance>(rtw);
             if ((a.m_State & AmbulanceFlags.Transporting) == 0 || (a.m_State & AmbulanceFlags.FindHospital) != 0) return;
             var hospital = em.GetComponentData<Target>(rtw).m_Target;

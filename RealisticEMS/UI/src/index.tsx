@@ -2,6 +2,8 @@ import { ModRegistrar } from "cs2/modding";
 import { EmsButton, EmsPanel } from "mods/ems-panel";
 import { EmsIntro } from "mods/intro";
 import { EmsNews } from "mods/news";
+import { CallSection } from "mods/call-section";
+import { StationSection } from "mods/station-section";
 
 const register: ModRegistrar = (moduleRegistry) => {
     moduleRegistry.append("GameTopLeft", EmsButton);
@@ -12,6 +14,8 @@ const register: ModRegistrar = (moduleRegistry) => {
     moduleRegistry.extend("game-ui/game/components/selected-info-panel/selected-info-sections/selected-info-sections.tsx",
         "selectedInfoSectionComponents", (components: any) => {
             components["RealisticEMS.VehicleStateSection"] = components["Game.UI.InGame.VehiclesSection"];
+            components["RealisticEMS.CallInfoSection"] = CallSection;
+            components["RealisticEMS.StationCallsignSection"] = StationSection;
             return components;
         });
 };

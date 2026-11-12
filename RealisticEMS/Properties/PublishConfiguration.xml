@@ -38,6 +38,7 @@ Every feature can be switched off in Options. German and English.
 AI disclosure: the logo, layout and illustrations of the preview images were designed with AI. The photos are traced from my own in-game screenshots.
 	</LongDescription>
 	<Thumbnail Value="Properties/Thumbnail.png" />
+	<Screenshot Value="Properties/Screenshot0.jpg" />
 	<Screenshot Value="Properties/Screenshot1.jpg" />
 	<Screenshot Value="Properties/Screenshot2.jpg" />
 	<Screenshot Value="Properties/Screenshot3.jpg" />
@@ -47,9 +48,23 @@ AI disclosure: the logo, layout and illustrations of the preview images were des
 	<Screenshot Value="Properties/Screenshot7.jpg" />
 	<Tag Value="Code Mod" />
 	<ForumLink Value="" />
-	<ModVersion Value="26.0.1b" />
+	<ModVersion Value="26.0.2b" />
 	<GameVersion Value="1.*" />
 	<ChangeLog>
+26.0.2b
+New
+- Rettungsgasse reworked: on highways every traffic jam forms the corridor, on other multi-lane roads as soon as an emergency vehicle comes. Left lane goes left, all others right, trucks included. Ramps stay clear near exits and entries. Several emergency vehicles in a row pass together.
+- Narrow roads (one lane per direction): both directions pull to the kerb and the emergency vehicle drives on the centre line. If too narrow, the queue turns off at the next junction.
+- Oncoming overtake: with trucks or buses in the queue the oncoming lane is closed and the whole queue is passed.
+- All driving aids now cover every vehicle with lights: ambulance, emergency doctor, police and fire brigade.
+- "Siren only when needed" option: lights on, siren only in jams, overtakes and at red lights.
+- Left-hand traffic cities are mirrored automatically.
+- Dispatch panel in Material 3 with light and dark mode, plus a 3D city map.
+- Call info (code, phase, units, times) in the selected vehicle panel.
+
+Changed
+- "Export log" writes a SHA-256 hash file instead of a signature.
+
 26.0.1b
 New
 - Call volume option: Few, Balanced or Many sick and injured calls (about half, as vanilla, about twice). Deaths are not affected.
@@ -57,7 +72,7 @@ New
 - "What's new" screen after every update: the last 3 changelogs, plus a button to open the GitHub issues page for bug reports.
 - Fire engines never get an emergency corridor (too big). They overtake on a free lane, or on the oncoming lane for any standing queue.
 - Anything on the oncoming lane ahead of an overtaking ambulance now stops and keeps right.
-- "Export log" button in the options: copies the log into a signed folder under Logs/, so bug reports can be shown to be unmodified. The Debug page now needs the debug password (Options > About).
+- "Export log" button in the options: copies the log into a folder under Logs/, so bug reports can be shown to be unmodified. The Debug page now needs the debug password (Options > About).
 
 Fixed
 - Blue lights stayed on after the call was finished or while the ambulance drove home without a critical patient. They now switch off.
