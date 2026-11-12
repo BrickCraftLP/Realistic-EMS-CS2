@@ -20,7 +20,7 @@ const LOG: Entry[] = ([
         en: [
             { kind: "new", items: [
                 "Rettungsgasse reworked: on highways every traffic jam forms the corridor, on multi-lane roads as soon as an emergency vehicle comes. Left lane goes left, all others right, trucks included. Ramps stay clear, convoys pass together.",
-                "Narrow roads: both directions pull to the kerb and the emergency vehicle drives on the centre line.",
+                "Narrow roads: both directions pull to the kerb and the emergency vehicle drives on the centre line. If the road is too narrow, the queue turns off at the next junction.",
                 "Oncoming overtake: with trucks or buses in the queue the oncoming lane is closed and the whole queue is passed.",
                 "Driving aids now cover every vehicle with lights: ambulance, emergency doctor, police and fire brigade.",
                 "Option \"Siren only when needed\": in jams, overtakes and at red lights.",
@@ -33,7 +33,7 @@ const LOG: Entry[] = ([
         de: [
             { kind: "new", items: [
                 "Rettungsgasse überarbeitet: Auf der Autobahn bildet jeder Stau die Gasse, auf mehrspurigen Straßen sobald ein Einsatzfahrzeug kommt. Linke Spur nach links, alle anderen nach rechts, Lkw inklusive. Rampen bleiben frei, Kolonnen fahren gemeinsam durch.",
-                "Schmale Straßen: Beide Richtungen fahren an den Rand, das Einsatzfahrzeug fährt auf der Mittellinie.",
+                "Schmale Straßen: Beide Richtungen fahren an den Rand, das Einsatzfahrzeug fährt auf der Mittellinie. Ist die Straße zu eng, biegt die Kolonne an der nächsten Kreuzung ab.",
                 "Überholen auf der Gegenfahrbahn: Stehen Lkw oder Busse in der Kolonne, wird die Gegenfahrbahn gesperrt und die ganze Kolonne überholt.",
                 "Die Fahrhilfen gelten für alle Fahrzeuge mit Blaulicht: RTW, NEF, Polizei und Feuerwehr.",
                 "Option \"Sirene nur bei Bedarf\": im Stau, beim Überholen und an roten Ampeln.",
