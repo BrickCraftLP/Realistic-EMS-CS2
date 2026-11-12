@@ -13,7 +13,7 @@ namespace RealisticEMS
         public static Setting Setting;
 
         /// <summary>Shown in the "what's new" screen; keep in sync with ModVersion in Properties/PublishConfiguration.xml and the newest entry in UI/src/mods/news.tsx.</summary>
-        public const string Version = "26.0.1b";
+        public const string Version = "26.0.2b";
 
         /// <summary>German texts when the game runs in German, English otherwise.</summary>
         public static bool German => GameManager.instance?.localizationManager?.activeLocaleId?.StartsWith("de") == true;
@@ -34,7 +34,11 @@ namespace RealisticEMS
             updateSystem.UpdateAfter<UnitNamingSystem, AmbulanceAISystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateBefore<AmbulanceStuckGuardSystem, AmbulanceAISystem>(SystemUpdatePhase.GameSimulation); // before it deletes stuck ambulances
             updateSystem.UpdateAfter<EmergencyLaneSystem, CarNavigationSystem.Actions>(SystemUpdatePhase.GameSimulation); // after lane object updates
+            updateSystem.UpdateBefore<CorridorPreNavSystem, CarNavigationSystem>(SystemUpdatePhase.GameSimulation); // hidden cars stay out of the lane lists
             updateSystem.UpdateAfter<SignalOverrideSystem, TrafficLightSystem>(SystemUpdatePhase.GameSimulation);
+            // SirenOnlyWhenNeeded: hide CarFlags.Emergency from the effect check only, never from the simulation.
+            updateSystem.UpdateBefore<SirenMuteSystem, Game.Effects.EffectControlSystem>(SystemUpdatePhase.PreCulling);
+            updateSystem.UpdateAfter<SirenRestoreSystem, Game.Effects.EffectControlSystem>(SystemUpdatePhase.PreCulling);
             updateSystem.UpdateBefore<NefPrefabSystem, Game.Prefabs.PrefabInitializeSystem>(SystemUpdatePhase.PrefabUpdate);
             updateSystem.UpdateAfter<NefDispatchSystem, AmbulanceAISystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateAfter<OnSceneCareSystem, NefDispatchSystem>(SystemUpdatePhase.GameSimulation);
@@ -47,6 +51,7 @@ namespace RealisticEMS
             updateSystem.UpdateAt<DispatchUISystem>(SystemUpdatePhase.UIUpdate);
             Ampds.Load();
             Ampds.SelfCheck();
+            EmergencyLaneSystem.SelfCheck();
             // Must add the prefab before PrefabInitializeSystem runs that frame, else it is never LateInitialized (no toolbar group).
             updateSystem.UpdateBefore<DepotPrefabSystem, Game.Prefabs.PrefabInitializeSystem>(SystemUpdatePhase.PrefabUpdate);
             log.Info("Loaded");

@@ -16,6 +16,35 @@ type Entry = { v: string; en: Section[]; de: Section[] };
 // Newest first. Keep only the last 3 here; older ones live on GitHub. When adding a version, also bump Mod.Version (Mod.cs).
 const LOG: Entry[] = ([
     {
+        v: "26.0.2b",
+        en: [
+            { kind: "new", items: [
+                "Rettungsgasse reworked: on highways every traffic jam forms the corridor, on multi-lane roads as soon as an emergency vehicle comes. Left lane goes left, all others right, trucks included. Ramps stay clear, convoys pass together.",
+                "Narrow roads: both directions pull to the kerb and the emergency vehicle drives on the centre line.",
+                "Oncoming overtake: with trucks or buses in the queue the oncoming lane is closed and the whole queue is passed.",
+                "Driving aids now cover every vehicle with lights: ambulance, emergency doctor, police and fire brigade.",
+                "Option \"Siren only when needed\": in jams, overtakes and at red lights.",
+                "Left-hand traffic cities are mirrored automatically.",
+                "Dispatch panel in Material 3 with light and dark mode, plus a 3D city map.",
+                "Call info (code, phase, units, times) in the selected vehicle panel.",
+            ] },
+            { kind: "fixed", items: ["\"Export log\" now writes a SHA-256 hash file instead of a signature."] },
+        ],
+        de: [
+            { kind: "new", items: [
+                "Rettungsgasse überarbeitet: Auf der Autobahn bildet jeder Stau die Gasse, auf mehrspurigen Straßen sobald ein Einsatzfahrzeug kommt. Linke Spur nach links, alle anderen nach rechts, Lkw inklusive. Rampen bleiben frei, Kolonnen fahren gemeinsam durch.",
+                "Schmale Straßen: Beide Richtungen fahren an den Rand, das Einsatzfahrzeug fährt auf der Mittellinie.",
+                "Überholen auf der Gegenfahrbahn: Stehen Lkw oder Busse in der Kolonne, wird die Gegenfahrbahn gesperrt und die ganze Kolonne überholt.",
+                "Die Fahrhilfen gelten für alle Fahrzeuge mit Blaulicht: RTW, NEF, Polizei und Feuerwehr.",
+                "Option \"Sirene nur bei Bedarf\": im Stau, beim Überholen und an roten Ampeln.",
+                "Städte mit Linksverkehr werden automatisch gespiegelt.",
+                "Einsatzpanel in Material 3 mit hellem und dunklem Modus, dazu eine 3D-Stadtkarte.",
+                "Einsatzinfo (Code, Phase, Einheiten, Zeiten) im Fahrzeugfenster.",
+            ] },
+            { kind: "fixed", items: ["\"Protokoll exportieren\" schreibt jetzt eine SHA-256-Hashdatei statt einer Signatur."] },
+        ],
+    },
+    {
         v: "26.0.1b",
         en: [
             { kind: "new", items: [

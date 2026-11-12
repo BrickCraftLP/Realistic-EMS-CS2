@@ -1,15 +1,31 @@
 // Leitstelle: a dispatch console inside the CS2 UI. Dark, dense, tabular.
 // Color only carries meaning: urgency level, unit status, load. Everything else is neutral.
 
-$ink: #14181f;
-$ink-2: #5b6370;
-$ink-3: #9aa1ab;
-$line: #eceef1;
-$surface: #f5f6f8;
-$surface-hi: #e9ebef;
-$card: #ffffff;
-$bg: #f2f3f5;
-$accent: #e8473e; // signal red: active menu item, counters
+// Material 3 light scheme, tonal palette from a red seed (#e8473e).
+$primary: var(--primary);
+$on-primary: var(--on-primary);
+$primary-container: var(--primary-container);
+$secondary-container: var(--secondary-container);
+$on-secondary-container: var(--on-secondary-container);
+$ink: var(--ink);          // on-surface
+$ink-2: var(--ink-2);        // on-surface-variant
+$ink-3: var(--ink-3);        // outline
+$line: var(--line);         // outline-variant
+$surface: var(--surface);      // surface-container
+$surface-hi: var(--surface-hi);   // surface-container-highest
+$card: var(--card);         // surface-container-low
+$bg: var(--bg);           // surface
+$accent: $primary;
+$focus: 0 0 0 2rem $primary;
+$ease-out: cubic-bezier(0.23, 1, 0.32, 1);      // strong ease-out: enters, feedback
+$ease-emph: cubic-bezier(0.05, 0.7, 0.1, 1);    // M3 emphasized decelerate
+$motion: 0.2s cubic-bezier(0.2, 0, 0, 1);       // M3 standard: hover/colour
+$press: 0.16s $ease-out;                        // press feedback
+
+// Enters: short rise + fade. Never from scale(0); transform/opacity only.
+@keyframes ems-enter { from { opacity: 0; transform: translateY(8rem); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ems-expand { from { opacity: 0; transform: scaleY(0.92); } to { opacity: 1; transform: scaleY(1); } }
+@keyframes ems-pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
 
 // MPDS levels
 $lv-E: #b3122b;
@@ -32,58 +48,129 @@ $s-patrol: #8a7cf0; // police on patrol
     width: 1320rem;
 }
 
-// ---- shell: sidebar + page ----
-.shell { display: flex; flex-direction: row; margin: -10rem; background-color: $bg; border-radius: 6rem; }
+// ---- shell: page + floating navigation dock ----
+// Dock = two M3 floating pills at the bottom: sub-pages of the active group (small, light) above the groups (dark, vibrant).
+// Widths are set inline in ems-panel.tsx (GROUP_W / SUB_W) because the sliding indicators move by whole slots.
+$dock: #2e3036;         // inverse-surface
+$on-dock: #f0f0f7;      // inverse-on-surface
+$dock-mute: #c4c6d0;
+$shadow: 0 4rem 14rem rgba(var(--shade), 0.28), 0 1rem 3rem rgba(var(--shade), 0.2);
+$slide: 0.34s $ease-emph;
 
-.sidebar {
-    width: 200rem;
-    padding: 16rem 10rem;
-    background-color: $card;
-    border-right: 1rem solid $line;
+@keyframes ems-dock-up { from { opacity: 0; transform: translateY(24rem) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes ems-sub-in { from { opacity: 0; transform: translateY(10rem) scale(0.94); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes ems-search-in { from { opacity: 0; transform: translateX(28rem) scale(0.94); } to { opacity: 1; transform: translateX(0) scale(1); } }
+@keyframes ems-label-in { from { opacity: 0; transform: translateY(4rem); } to { opacity: 1; transform: translateY(0); } }
+
+.shell { position: relative; display: flex; flex-direction: column; margin: -10rem; background-color: $bg; border-radius: 16rem; overflow: hidden; }
+
+// soft fade so scrolled content does not collide with the dock
+.dockFade { position: absolute; left: 0; right: 0; bottom: 0; height: 120rem; pointer-events: none;
+    background-image: linear-gradient(to bottom, rgba(var(--bgc), 0), rgba(var(--bgc), 0.96) 70%); }
+
+.dock { position: absolute; left: 0; right: 0; bottom: 16rem; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+
+.dockRow { position: relative; display: flex; flex-direction: row; align-items: center; pointer-events: none; }
+
+.groupPill, .subPill, .searchPill, .searchBtn { position: relative; display: flex; flex-direction: row; pointer-events: auto; box-shadow: $shadow; }
+// M3 expressive floating toolbar: one tonal pill, labels only; the active slot gets an icon and a filled indicator.
+.groupPill { height: 64rem; border-radius: 32rem; background-color: $secondary-container; transform-origin: 50% 100%; animation: ems-dock-up 0.5s $ease-emph both; }
+.topRow { position: relative; display: flex; flex-direction: row; align-items: flex-start; }
+.topRight { position: absolute; right: 0; top: 2rem; z-index: 20; display: flex; flex-direction: column; align-items: flex-end; }
+.winDock { position: absolute; right: 96rem; top: 0; animation: ems-sub-in 0.24s $ease-out both; }
+
+// cog in a circle (top right) + menu that opens as a circle growing from the cog
+@keyframes ems-menu { from { clip-path: circle(0 at calc(100% - 20rem) 0); opacity: 0; } to { clip-path: circle(150% at calc(100% - 20rem) 0); opacity: 1; } }
+.cogBtn { display: flex; align-items: center; justify-content: center; width: 40rem; height: 40rem; border-radius: 20rem; background-color: $surface-hi; border: 1rem solid $line; color: $ink-2; cursor: pointer; outline: none;
+    transition: background-color $motion, color $motion, transform $press;
+    svg { width: 24rem; height: 24rem; transition: transform 0.4s $ease-emph; }
+    &:hover { color: $ink; }
+    &:active { transform: scale(0.94); }
+    &:focus-visible { box-shadow: $focus; }
+}
+.cogBtnOn { background-color: $primary; border-color: $primary; color: $on-primary; &:hover { color: $on-primary; } svg { transform: rotate(90deg); } }
+.menu { margin-top: 8rem; min-width: 220rem; padding: 8rem; border-radius: 24rem; background-color: $surface-hi; border: 1rem solid $line; box-shadow: $shadow; transform-origin: 100% 0; animation: ems-menu 0.36s $ease-emph both; }
+.menuHead { padding: 8rem 12rem 4rem; font-size: 12rem; font-weight: 500; letter-spacing: 0.5rem; color: $ink-3; }
+.menuItem { display: block; width: 100%; height: 40rem; padding: 0 12rem; border: none; border-radius: 20rem; background: none; text-align: left; cursor: pointer; outline: none; color: $ink; font-size: 14rem; font-weight: 500; letter-spacing: 0.1rem;
+    transition: background-color $motion, transform $press;
+    &:hover { background-color: rgba(var(--shade), 0.08); }
+    &:active { transform: scale(0.98); }
+    &:focus-visible { box-shadow: $focus; }
+}
+.menuItemOn { background-color: $primary; color: $on-primary; &:hover { background-color: $primary; } }
+.winPill { position: relative; display: flex; flex-direction: row; height: 40rem; border-radius: 20rem; background-color: $surface-hi; border: 1rem solid $line; pointer-events: auto; }
+.winInd { position: absolute; left: 2rem; top: 2rem; width: 56rem; height: 34rem; border-radius: 17rem; background-color: $primary; transition: transform $slide; }
+.winBtn { position: relative; flex: none; width: 56rem; height: 38rem; background: none; border: none; border-radius: 19rem; cursor: pointer; outline: none; color: $ink-2; font-size: 14rem; font-weight: 500; transition: color $motion, transform $press; &:hover { color: $ink; } &:active { transform: scale(0.97); } }
+.winBtnOn { color: $on-primary; &:hover { color: $on-primary; } }
+.topCenter { position: absolute; left: 0; right: 0; top: 0; display: flex; flex-direction: row; justify-content: center; pointer-events: none; }
+.subPill { flex: none; height: 44rem; margin-top: 2rem; border-radius: 22rem; background-color: $surface-hi; border: 1rem solid $line; transform-origin: 50% 0; animation: ems-sub-in 0.24s $ease-out both; }
+
+// sliding indicators: one element per pill, moved with transform (inline translateX)
+.groupInd { position: absolute; top: 8rem; left: 8rem; height: 48rem; border-radius: 24rem; background-color: $primary; transition: transform $slide; }
+.subInd { position: absolute; top: 4rem; left: 4rem; height: 36rem; border-radius: 18rem; background-color: $primary; transition: transform $slide; }
+
+.groupBtn, .subBtn { position: relative; flex: none; background: none; border: none; cursor: pointer; outline: none; transition: color $motion, transform $press; }
+.groupBtn:focus-visible, .subBtn:focus-visible, .searchBtn:focus-visible, .hit:focus-visible { box-shadow: $focus; }
+.groupBtn {
+    display: flex; flex-direction: row; align-items: center; justify-content: center; height: 64rem; border-radius: 32rem;
+    color: $ink; font-size: 16rem; font-weight: 500; letter-spacing: 0.15rem;
+    svg { width: 24rem; height: 24rem; margin-right: 8rem; animation: ems-pop 0.28s $ease-out both; }
+    &:hover { color: $primary; }
+    &:active { transform: scale(0.97); }
+}
+.groupBtnOn { color: $on-primary; font-weight: 600; &:hover { color: $on-primary; } }
+
+.searchBtn { position: absolute; left: 100%; top: 0; margin-left: 12rem; flex: none; align-items: center; justify-content: center; width: 64rem; height: 64rem; border-radius: 32rem; background-color: $secondary-container;
+    border: none; color: $ink; cursor: pointer; transition: background-color $motion, transform $press; animation: ems-dock-up 0.5s $ease-emph 0.06s both;
+    svg { width: 28rem; height: 28rem; }
+    &:hover { background-color: var(--hover); }
+    &:active { transform: scale(0.94); }
+    outline: none;
+}
+.searchPill { align-items: center; height: 64rem; width: 452rem; padding: 0 24rem; border-radius: 32rem; background-color: $secondary-container; color: $ink-2; transform-origin: 100% 50%; animation: ems-search-in 0.3s $ease-emph both;
+    svg { flex: none; width: 24rem; height: 24rem; margin-right: 12rem; }
+    input { flex: 1; height: 100%; background: none; border: none; outline: none; color: $ink; font-size: 16rem; letter-spacing: 0.15rem; }
 }
 
-.navGroup { margin-bottom: 14rem; }
-
-.navGroupHead, .navItem, .navItemActive {
-    display: flex; flex-direction: row; align-items: center; justify-content: space-between;
-    width: 100%; background: none; border: none; cursor: pointer; text-align: left;
+.results { width: 452rem; margin: 0 0 10rem 0; padding: 6rem; border-radius: 24rem; background-color: $surface-hi; border: 1rem solid $line; box-shadow: $shadow; pointer-events: auto; transform-origin: 100% 100%; animation: ems-sub-in 0.2s $ease-out both; }
+.hit { display: flex; flex-direction: row; align-items: center; width: 100%; height: 48rem; padding: 0 12rem; border-radius: 18rem; background: none; border: none; cursor: pointer; text-align: left; color: $ink; font-size: 14rem; transition: background-color $motion, transform $press;
+    &:hover { background-color: rgba(var(--shade), 0.08); }
+    &:active { transform: scale(0.98); }
+    outline: none;
+    > span:nth-child(2) { flex: 1; min-width: 0; margin: 0 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+.hitEmpty { padding: 14rem 12rem; font-size: 14rem; color: $ink-2; }
+.callId { margin-left: 8rem; font-size: 12rem; color: $ink-3; font-variant-numeric: tabular-nums; }
 
-.navGroupHead {
-    padding: 4rem 10rem 6rem 10rem;
-    font-size: 11rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: $ink-3;
-    &:hover { color: $ink-2; }
+.subBtn { height: 44rem; padding: 0 8rem; color: $ink-2; font-size: 14rem; font-weight: 500; letter-spacing: 0.1rem; border-radius: 22rem; text-align: center;
+    &:hover { color: $ink; }
+    &:active { transform: scale(0.97); }
 }
+.subBtnOn { color: $on-primary; &:hover { color: $on-primary; } }
 
-.caret { font-size: 14rem; }
+.navBadge { margin-left: 8rem; animation: ems-pop 0.25s $ease-out both;
+    min-width: 16rem; height: 16rem; padding: 0 4rem; border-radius: 8rem; background-color: #ba1a1a; color: #fff;
+    font-size: 11rem; line-height: 16rem; text-align: center; font-weight: 500; }
 
-.navItem, .navItemActive {
-    padding: 8rem 10rem 8rem 18rem;
-    margin-bottom: 2rem;
-    border-radius: 6rem;
-    font-size: 14rem; font-weight: 500; color: $ink-2;
-    transition: background-color 0.15s ease-out, color 0.15s ease-out;
-    &:hover { background-color: $surface; color: $ink; }
-}
+.main { flex: none; padding: 24rem 24rem 0 24rem; }
 
-.navItemActive { background-color: $surface-hi; color: $ink; font-weight: 700; box-shadow: inset 3rem 0 0 $accent; }
-
-.main { flex: 1; padding: 18rem 20rem 0 20rem; }
-
+// headline-small + body-medium
 .pageHead {
-    margin-bottom: 14rem;
-    h1 { margin: 0; font-size: 26rem; font-weight: 600; color: $ink; }
-    .note { margin-top: 2rem; }
+    margin-bottom: 16rem;
+    h1 { margin: 0; font-size: 24rem; line-height: 32rem; font-weight: 400; color: $ink; }
+    .note { margin-top: 4rem; font-size: 14rem; color: $ink-2; }
 }
 
+// M3 large badge
 .tabCount {
+    animation: ems-pop 0.25s $ease-out both;
     margin-left: 8rem;
-    padding: 1rem 7rem;
-    border-radius: 9rem;
-    background-color: $accent;
+    min-width: 16rem; height: 16rem; padding: 0 4rem;
+    border-radius: 8rem;
+    background-color: #ba1a1a;
     color: white;
-    font-size: 12rem;
-    font-weight: 700;
+    font-size: 11rem; line-height: 16rem; text-align: center;
+    font-weight: 500;
 }
 
 .content {
@@ -92,24 +179,70 @@ $s-patrol: #8a7cf0; // police on patrol
 }
 
 // ---- Lage ----
+// ---- Statistik: Google Health style ----
+.statTop { display: flex; flex-direction: row; align-items: stretch; height: 400rem; margin-bottom: 16rem; }
+.heroPills { flex: none; width: 300rem; margin: 0 12rem; display: flex; flex-direction: column; .ptile { flex: 1; margin-bottom: 12rem; &:last-child { margin-bottom: 0; } } }
+
+.statTop > .ringCard { flex: none; width: 290rem; margin-bottom: 0; display: flex; flex-direction: column; align-items: center; }
+.ringCard .cardHead { align-self: stretch; margin-bottom: 0; }
+.ringWrap { position: relative; width: 190rem; height: 190rem; margin-top: 36rem; }
+.ringCenter { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.ringValue { font-size: 44rem; line-height: 52rem; font-weight: 500; color: $ink; font-variant-numeric: tabular-nums; }
+.ringNote { margin-top: 14rem; font-size: 13rem; color: $ink-2; text-align: center; }
+.legendInline { display: flex; flex-direction: row; font-size: 13rem; color: $ink-2; > span { margin-left: 12rem; } }
+
+// tonal tile: pale tone as the track, darker tone as the fill
+.ptile { position: relative; display: flex; flex-direction: row; align-items: center; height: 100%; min-height: 64rem; padding: 0 14rem; border-radius: 36rem; overflow: hidden; color: $ink; }
+.ptileFill { position: absolute; left: 0; top: 0; height: 100%; transition: width 0.6s $ease-emph; }
+.ptileIcon { position: relative; flex: none; display: flex; align-items: center; justify-content: center; width: 44rem; height: 44rem; margin-right: 12rem; border-radius: 22rem; background-color: #ffffff; svg { width: 22rem; height: 22rem; } }
+.ptileBody { position: relative; display: flex; flex-direction: column; min-width: 0; }
+.ptileLabel { font-size: 12rem; line-height: 16rem; font-weight: 500; letter-spacing: 0.3rem; }
+.ptileValue { font-size: 22rem; line-height: 28rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.ptileNote { margin-left: 6rem; font-size: 13rem; font-weight: 400; color: rgba(var(--shade), 0.7); }
+.toneTeal { background-color: #cdf5ef; .ptileFill { background-color: #8fe6da; } }
+.toneGreen { background-color: #d6f0d4; .ptileFill { background-color: #a9dca6; } }
+.tonePurple { background-color: #ece0fb; .ptileFill { background-color: #cfb7f2; } }
+.toneAmber { background-color: #fde8c8; .ptileFill { background-color: #f7cf94; } }
+.toneBlue { background-color: #d8e6fb; .ptileFill { background-color: #aec9f2; } }
+.toneRose { background-color: #fbdcd8; .ptileFill { background-color: #f2b4ac; } }
+
+// range rows
+.statTop > .rangeCard { flex: 1; min-width: 0; margin-bottom: 0; display: flex; flex-direction: column; }
+.rr { margin-bottom: 10rem; padding: 12rem 14rem 8rem 14rem; border-radius: 16rem; background-color: $surface-hi; &:last-child { margin-bottom: 0; } }
+.rrHead { display: flex; flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 6rem; }
+.rrLabel { font-size: 14rem; font-weight: 500; color: $ink; }
+.rrChip { padding: 2rem 10rem; border-radius: 10rem; font-size: 12rem; font-weight: 600; }
+.chip_ok { background-color: #c8ecc9; color: #14531c; }
+.chip_warn { background-color: #fde3b8; color: #6b4400; }
+.chip_bad { background-color: #ffd9d4; color: #8c1d18; }
+.rrBar { position: relative; height: 24rem; }
+.rrTrack { position: absolute; right: 0; transition: left 0.6s $ease-emph; top: 10rem; height: 4rem; border-radius: 2rem; background-color: rgba(var(--shade), 0.18); }
+.rrWave { position: absolute; left: 0; top: 4rem; height: 16rem; overflow: hidden; transition: width 0.6s $ease-emph; }
+.rrFill { position: absolute; left: 0; top: 6rem; height: 12rem; border-radius: 6rem; transition: width 0.6s $ease-emph; }
+.fill_ok { background-color: #2aa355; } .fill_warn { background-color: #e0a30a; } .fill_bad { background-color: #d9372b; }
+// M3 expressive slider handle: state-coloured disc at the wave head; the track starts a gap after it (inline left)
+.rrThumb { position: absolute; top: 5rem; width: 14rem; height: 14rem; margin-left: -7rem; border-radius: 7rem; transition: left 0.6s $ease-emph; }
+// target range edge: tall rounded line
+.rrMark { position: absolute; top: 0; width: 4rem; height: 24rem; margin-left: -2rem; border-radius: 2rem; background-color: rgba(var(--shade), 0.18); }
+
 .lage {
     display: flex;
     flex-direction: column;
 }
 
 .block {
-    padding: 14rem 16rem 16rem 16rem;
-    margin-bottom: 12rem;
+    padding: 16rem;
+    margin-bottom: 16rem;
     background-color: $surface;
     border-radius: 6rem;
 
     h2 {
         margin: 0;
-        font-size: 13rem;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: $ink-2;
+        font-size: 14rem;
+        line-height: 20rem;
+        font-weight: 500;
+        letter-spacing: 0.1rem;
+        color: $ink;
     }
 }
 
@@ -124,7 +257,7 @@ $s-patrol: #8a7cf0; // police on patrol
 .figure {
     font-size: 14rem;
     color: $ink-2;
-    b { font-size: 22rem; font-weight: 700; color: $ink; margin-right: 4rem; }
+    b { font-size: 22rem; font-weight: 400; color: $ink; margin-right: 4rem; }
 }
 
 .fleet {
@@ -198,52 +331,60 @@ $s-patrol: #8a7cf0; // police on patrol
     .note { margin: 0 0 0 12rem; }
 }
 
+// M3 filter chip: 32 tall, 8 radius, outline-variant border; selected = secondary-container, no border.
 .chip, .chipOn {
-    padding: 5rem 12rem;
-    border-radius: 14rem;
-    border: 1rem solid $line;
-    background-color: $surface;
+    height: 32rem;
+    padding: 0 16rem;
+    margin-right: 8rem;
+    border-radius: 8rem;
+    border: 1rem solid $ink-3;
+    background-color: transparent;
     color: $ink-2;
-    font-size: 13rem;
+    font-size: 14rem; font-weight: 500; letter-spacing: 0.1rem;
     cursor: pointer;
-    transition: background-color 0.15s ease-out, color 0.15s ease-out;
-    &:hover { background-color: $surface-hi; color: $ink; }
+    transition: background-color $motion, color $motion, transform $press;
+    &:hover { background-color: rgba(var(--shade), 0.08); color: $ink; }
+    &:active { transform: scale(0.96); }
+    &:focus { box-shadow: $focus; }
+    &:disabled { opacity: 0.38; cursor: default; }
 }
 
-.chipOn { background-color: $ink; border-color: $ink; color: white; &:hover { background-color: $ink; color: white; } }
+.chipOn { background-color: $secondary-container; border-color: $secondary-container; color: $on-secondary-container;
+    &:hover { background-color: var(--hover); color: $on-secondary-container; } }
 
 .row {
     display: flex;
     flex-direction: row;
     align-items: center;
-    min-height: 40rem;
-    padding: 0 10rem;
+    min-height: 52rem;
+    padding: 0 16rem;
     border-top: 1rem solid $line;
     font-size: 14rem;
     color: $ink;
     > span { padding-right: 12rem; }
-    &:hover { background-color: $surface; }
+    transition: background-color $motion;
+    &:hover { background-color: rgba(var(--shade), 0.08); }
 }
 
 .head {
     min-height: 30rem;
     border-top: none;
     font-size: 12rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: $ink-3;
+    font-weight: 500;
+    letter-spacing: 0.5rem;
+    color: $ink-2;
     &:hover { background-color: transparent; }
 }
 
 // column widths per table (flex basis; Gameface has no table layout)
 .colsVehicle {
-    > span:nth-child(1) { width: 140rem; }
-    > span:nth-child(2) { width: 140rem; }
+    > span:nth-child(1) { width: 130rem; }
+    > span:nth-child(2) { width: 130rem; }
     > span:nth-child(3) { width: 100rem; }
-    > span:nth-child(4) { flex: 1; }
-    > span:nth-child(5) { width: 190rem; }
+    > span:nth-child(4) { width: 90rem; }
+    > span:nth-child(5) { flex: 1; }
     > span:nth-child(6) { width: 150rem; }
+    > span:nth-child(7) { width: 150rem; }
 }
 
 .colsHospital {
@@ -269,7 +410,7 @@ $s-patrol: #8a7cf0; // police on patrol
 .full { color: $lv-D; font-weight: 600; }
 
 .empty {
-    padding: 28rem 12rem;
+    padding: 48rem 16rem;
     text-align: center;
     font-size: 14rem;
     color: $ink-3;
@@ -278,9 +419,9 @@ $s-patrol: #8a7cf0; // police on patrol
 // ---- atoms ----
 .badge {
     padding: 2rem 7rem;
-    border-radius: 3rem;
-    font-size: 13rem;
-    font-weight: 700;
+    border-radius: 8rem;
+    font-size: 12rem;
+    font-weight: 500;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
     color: #14171a;
@@ -342,7 +483,7 @@ $s-patrol: #8a7cf0; // police on patrol
     width: 1000rem;
     height: 560rem;
     background-color: $surface;
-    border-radius: 6rem;
+    border-radius: 12rem;
     overflow: hidden;
     cursor: move;
 }
@@ -361,10 +502,10 @@ $s-patrol: #8a7cf0; // police on patrol
 .markerLabel {
     margin-left: 4rem;
     padding: 0 4rem;
-    border-radius: 2rem;
-    background-color: rgba(255, 255, 255, 0.85);
+    border-radius: 4rem;
+    background-color: rgba(var(--bgc), 0.9);
     font-size: 11rem;
-    font-weight: 600;
+    font-weight: 500;
     color: $ink;
     white-space: nowrap;
 }
@@ -376,7 +517,8 @@ $s-patrol: #8a7cf0; // police on patrol
 .mkStation { width: 10rem; height: 10rem; border: 2rem solid $ink; }
 // Police: diamond with a white rim, so it never reads as an RTW even when the status colors match.
 .mkPolice { width: 8rem; height: 8rem; margin: 1rem; border: 1rem solid white; transform: rotate(45deg); }
-.mapLegend { flex-wrap: wrap; }
+.mapLegend { flex-wrap: wrap; margin-top: 14rem; }
+.mapCard { box-sizing: border-box; height: 668rem; margin-bottom: 0; display: flex; flex-direction: column; padding: 16rem; .map { flex: 1; width: 100%; height: auto; min-height: 0; background-color: $surface; } .zoom > button { margin: 0 0 0 8rem; } }
 
 .legendItem { margin-right: 18rem; font-size: 13rem; color: $ink-2; > span:first-child { margin-right: 6rem; } }
 
@@ -398,15 +540,15 @@ $s-patrol: #8a7cf0; // police on patrol
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 12rem 16rem 13rem 16rem;
+    padding: 16rem;
     margin-right: 12rem;
     background-color: $surface;
     border-radius: 6rem;
     &:last-child { margin-right: 0; }
 }
 
-.tileLabel { font-size: 12rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: $ink-2; }
-.tileValue { margin-top: 6rem; font-size: 28rem; font-weight: 700; color: $ink; font-variant-numeric: tabular-nums; }
+.tileLabel { font-size: 12rem; font-weight: 500; letter-spacing: 0.5rem; color: $ink-2; }
+.tileValue { margin-top: 4rem; font-size: 28rem; line-height: 36rem; font-weight: 400; color: $ink; font-variant-numeric: tabular-nums; }
 .tileUnit { margin-left: 5rem; font-size: 15rem; font-weight: 400; color: $ink-2; }
 .tileNote { margin-top: 3rem; font-size: 12rem; color: $ink-3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -423,6 +565,10 @@ $s-patrol: #8a7cf0; // police on patrol
     margin-top: 4rem;
     border-bottom: 1rem solid $ink-3;
 }
+
+.smooth { position: relative; height: 96rem; margin-top: 4rem; border-bottom: 1rem solid $ink-3; }
+.smoothSvg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.cursor { position: absolute; top: 0; bottom: 0; width: 1rem; margin-left: -1rem; background-color: $ink-2; pointer-events: none; }
 
 .col {
     flex: 1;
@@ -491,40 +637,93 @@ $s-patrol: #8a7cf0; // police on patrol
 .histLabel { margin-top: 5rem; font-size: 12rem; color: $ink-3; }
 
 // ---- Dashboard ----
+// dashboard top: two squares (side column) left of the live map, all the same height
+.dashTop { display: flex; flex-direction: row; height: 560rem; margin-bottom: 16rem; }
+.dashSide { flex: none; width: 272rem; margin-right: 16rem; display: flex; flex-direction: column; }
+.dashSide > .card { margin-bottom: 16rem; &:last-child { margin-bottom: 0; } }
+.sq { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; .cardHead { margin-bottom: 8rem; } }
+.dashSide > .sq { padding: 12rem 16rem; }
+.dashSide > .sq.sqSmall { flex: none; height: 96rem; justify-content: center; }
+.dashSide > .sq.sqSummary { flex: none; height: 148rem; }
+.miniRow { flex: 1; display: flex; flex-direction: row; align-items: center; }
+.miniRing { flex: none; width: 112rem; margin-right: 12rem; display: flex; flex-direction: column; align-items: center; }
+.miniRingWrap { position: relative; width: 96rem; height: 96rem; }
+.miniRingValue { font-size: 22rem; line-height: 28rem; font-weight: 500; color: $ink; font-variant-numeric: tabular-nums; }
+.miniCaption { margin-top: 4rem; font-size: 12rem; color: $ink-2; text-align: center; }
+.miniStats { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.miniStat { display: flex; flex-direction: column; margin: 3rem 0; }
+.miniLabel { font-size: 12rem; line-height: 16rem; color: $ink-2; }
+.miniValue { font-size: 20rem; line-height: 24rem; font-weight: 500; color: $ink; font-variant-numeric: tabular-nums; }
+.dashTop > .dashMap { flex: 1; min-width: 0; margin-bottom: 0; display: flex; flex-direction: column; }
+
+// severity chart: scaleY on a full-height bar, so only transform animates
+.sevChart { flex: 1; min-height: 0; display: flex; flex-direction: row; align-items: stretch; }
+.sevCol { flex: 1; display: flex; flex-direction: column; align-items: center; margin: 0 3rem; }
+.sevNum { height: 18rem; font-size: 14rem; line-height: 18rem; font-weight: 500; color: $ink; font-variant-numeric: tabular-nums; }
+.sevTrack { flex: 1; width: 100%; max-width: 36rem; margin: 4rem 0; display: flex; flex-direction: column; justify-content: flex-end; border-radius: 8rem; background-color: rgba(var(--shade), 0.06); overflow: hidden; }
+.sevBar { width: 100%; height: 100%; border-radius: 8rem; transform-origin: 50% 100%; transition: transform 0.5s $ease-emph; }
+.sevLbl { height: 18rem; font-size: 12rem; line-height: 18rem; font-weight: 600; color: $ink-2; }
+
+// overview: wavy progress rows with an accordion
+.infoRow { margin-bottom: 8rem; &:last-child { margin-bottom: 0; } }
+.infoHead { display: flex; flex-direction: row; align-items: center; width: 100%; height: 22rem; margin-bottom: 4rem; padding: 0; background: none; border: none; cursor: pointer; text-align: left; color: $ink; outline: none; transition: transform $press;
+    &:active { transform: scale(0.99); } }
+.infoTitle { flex: 1; font-size: 14rem; font-weight: 500; letter-spacing: 0.1rem; }
+.infoVal { font-size: 14rem; font-variant-numeric: tabular-nums; color: $ink-2; }
+.infoHead .caret { margin-left: 8rem; font-size: 12rem; color: $ink-3; }
+
+@keyframes ems-wave { from { transform: translateX(0); } to { transform: translateX(-24rem); } }
+.wavy { position: relative; display: flex; flex-direction: row; align-items: center; width: 240rem; height: 16rem; }
+.waveClip { flex: none; height: 16rem; overflow: hidden; transition: width 0.6s $ease-emph; }
+.waveSvg { display: block; animation: ems-wave 2.4s linear infinite; }
+.waveHead { position: absolute; top: 1rem; width: 14rem; height: 14rem; margin-left: -7rem; border-radius: 7rem; transition: left 0.6s $ease-emph; }
+.waveTrack { flex: 1; height: 4rem; margin-left: 2rem; border-radius: 2rem; background-color: rgba(var(--shade), 0.14); }
+
 .grid { display: flex; flex-direction: row; align-items: flex-start; }
 .gridLeft { flex: 1.6; margin-right: 14rem; }
 .gridRight { flex: 1; }
 
+// M3 filled card: surface-container-low, 12 radius, no border/elevation.
 .card, .block, .tile {
     background-color: $card;
-    border: 1rem solid $line;
-    border-radius: 10rem;
+    border: none;
+    border-radius: 12rem;
 }
 
-.card { padding: 16rem 18rem; margin-bottom: 14rem; }
+.card { padding: 16rem; margin-bottom: 16rem; }
 
+// title-medium
 .cardHead {
     display: flex; flex-direction: row; justify-content: space-between; align-items: center;
     margin-bottom: 12rem;
-    h2 { margin: 0; font-size: 16rem; font-weight: 600; color: $ink; }
+    h2 { margin: 0; font-size: 16rem; line-height: 24rem; font-weight: 500; letter-spacing: 0.15rem; color: $ink; }
 }
 
+// M3 text button
 .link {
+    height: 40rem; padding: 0 12rem; border-radius: 20rem;
     background: none; border: none; cursor: pointer;
-    font-size: 13rem; font-weight: 600; color: $ink;
-    &:hover { color: $accent; }
+    font-size: 14rem; font-weight: 500; letter-spacing: 0.1rem; color: $primary;
+    transition: background-color $motion, transform $press;
+    &:hover { background-color: rgba(var(--shade), 0.08); }
+    &:active { transform: scale(0.97); }
+    &:focus { box-shadow: $focus; }
 }
 
-.mapCompact { width: 620rem; height: 347rem; }
+.mapCompact { flex: 1; width: 100%; height: auto; min-height: 0; }
+.fillCol { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 
 .mapControls {
     position: absolute; right: 12rem; bottom: 12rem;
     display: flex; flex-direction: column;
     > button {
-        width: 32rem; height: 32rem; margin-top: 6rem;
-        border-radius: 16rem; border: 1rem solid $line; background-color: $card;
-        font-size: 16rem; color: $ink; cursor: pointer;
-        &:hover { background-color: $surface-hi; }
+        width: 40rem; height: 40rem; margin-top: 8rem;
+        border-radius: 12rem; border: none; background-color: $primary-container;
+        box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.3), 0 4rem 8rem 3rem rgba(0, 0, 0, 0.15);
+        font-size: 18rem; color: #001b3e; cursor: pointer;
+        transition: background-color $motion, transform $press;
+        &:hover { background-color: var(--hover); }
+        &:active { transform: scale(0.94); }
     }
 }
 
@@ -536,9 +735,9 @@ $s-patrol: #8a7cf0; // police on patrol
     > span:nth-child(5) { width: 24rem; padding-right: 0; color: $ink-3; }
 }
 
-.callToggle { width: 100%; background: none; border: none; border-top: 1rem solid $line; cursor: pointer; text-align: left; }
+.callToggle { width: 100%; background: none; border: none; border-top: 1rem solid $line; cursor: pointer; text-align: left; &:focus { box-shadow: inset $focus; } }
 
-.callUnits { padding: 4rem 10rem 10rem 100rem; background-color: $surface; }
+.callUnits { padding: 4rem 16rem 12rem 106rem; background-color: $surface; transform-origin: top; animation: ems-expand 0.22s $ease-out both; }
 .callUnitRow {
     display: flex; flex-direction: row; align-items: center; padding: 6rem 0; font-size: 13rem; color: $ink;
     > span:nth-child(1) { width: 150rem; }
@@ -546,7 +745,7 @@ $s-patrol: #8a7cf0; // police on patrol
 }
 
 // Status as a soft pill: tinted background via opacity layer is not supported everywhere, so use solid + white text.
-.pill { padding: 3rem 9rem; border-radius: 4rem; font-size: 12rem; font-weight: 600; color: white; white-space: nowrap; }
+.pill { padding: 4rem 10rem; border-radius: 8rem; font-size: 12rem; font-weight: 500; color: white; white-space: nowrap; }
 
 .alert {
     display: flex; flex-direction: row; align-items: flex-start;
@@ -556,19 +755,19 @@ $s-patrol: #8a7cf0; // police on patrol
 }
 
 .alertIcon {
-    width: 26rem; height: 26rem; margin-right: 12rem;
-    border-radius: 13rem; text-align: center; line-height: 26rem;
-    font-size: 14rem; font-weight: 700; color: white;
+    width: 32rem; height: 32rem; margin-right: 16rem;
+    border-radius: 16rem; text-align: center; line-height: 32rem;
+    font-size: 14rem; font-weight: 500; color: white;
 }
 
 .alertBody { flex: 1; min-width: 0; }
-.alertTitle { display: flex; flex-direction: row; align-items: center; font-size: 14rem; font-weight: 600; color: $ink; }
+.alertTitle { display: flex; flex-direction: row; align-items: center; font-size: 14rem; font-weight: 500; color: $ink; }
 .alertText { margin-top: 2rem; font-size: 12rem; color: $ink-2; }
 
-.sevTag { margin-left: 8rem; padding: 1rem 6rem; border-radius: 4rem; font-size: 11rem; font-weight: 600; }
-.sevTag_high { background-color: #fde8e7; color: #c0362e; }
-.sevTag_medium { background-color: #fdf0e1; color: #b8641a; }
-.sevTag_low { background-color: #e6f4ea; color: #2f7d47; }
+.sevTag { margin-left: 8rem; padding: 2rem 8rem; border-radius: 8rem; font-size: 11rem; font-weight: 500; letter-spacing: 0.5rem; }
+.sevTag_high { background-color: #ffdad6; color: #410002; }
+.sevTag_medium { background-color: #ffdcbe; color: #2c1600; }
+.sevTag_low { background-color: #c2efcb; color: #00210c; }
 
 .sev_high { background-color: $lv-D; }
 .sev_medium { background-color: $lv-C; }
@@ -577,23 +776,75 @@ $s-patrol: #8a7cf0; // police on patrol
 // ---- Settings ----
 .setting {
     display: flex; flex-direction: row; align-items: center;
+    min-height: 72rem;
     padding: 12rem 0;
     border-top: 1rem solid $line;
+    &:first-of-type { border-top: none; }
 }
 
 .settingText { flex: 1; padding-right: 24rem; }
-.settingLabel { font-size: 14rem; font-weight: 600; color: $ink; }
-.settingDesc { margin-top: 3rem; font-size: 12rem; line-height: 1.4; color: $ink-2; }
+.settingLabel { font-size: 16rem; line-height: 24rem; font-weight: 400; letter-spacing: 0.5rem; color: $ink; }
+.settingDesc { margin-top: 2rem; font-size: 14rem; line-height: 20rem; letter-spacing: 0.25rem; color: $ink-2; }
 
+// M3 switch: 52x32 track; off = outlined track + 16 outline thumb, on = primary track + 24 white thumb.
 .switch, .switchOn {
-    width: 40rem; height: 22rem; padding: 0;
-    border: none; border-radius: 11rem; cursor: pointer;
+    width: 52rem; height: 32rem; padding: 0;
+    border: 2rem solid $ink-3; border-radius: 16rem; cursor: pointer;
     background-color: $surface-hi;
-    transition: background-color 0.15s ease-out;
-    > span { display: block; width: 18rem; height: 18rem; margin: 2rem; border-radius: 9rem; background-color: white; transition: transform 0.15s ease-out; }
+    transition: background-color $motion, border-color $motion;
+    &:focus { box-shadow: $focus; }
+    > span { display: block; width: 16rem; height: 16rem; margin: 6rem; border-radius: 8rem; background-color: $ink-3;
+        transition: transform $motion, width $motion, height $motion, margin $motion, background-color $motion; }
 }
 
-.switchOn { background-color: $s-free; > span { transform: translateX(18rem); } }
+.switchOn { background-color: $primary; border-color: $primary;
+    > span { width: 24rem; height: 24rem; margin: 2rem; border-radius: 12rem; background-color: $on-primary; transform: translateX(20rem); } }
 
 .stepper { display: flex; flex-direction: row; align-items: center; }
-.stepValue { width: 48rem; text-align: center; font-size: 14rem; font-weight: 600; color: $ink; font-variant-numeric: tabular-nums; }
+.stepValue { width: 48rem; text-align: center; font-size: 16rem; font-weight: 500; color: $ink; font-variant-numeric: tabular-nums; }
+
+// ---- motion: page switch rises in, cards cascade in 40ms steps ----
+.page { animation: ems-enter 0.28s $ease-emph both; }
+.page .card, .page .block, .page .tile { animation: ems-enter 0.32s $ease-emph both; }
+@for $i from 1 through 6 {
+    .page .card:nth-child(#{$i}), .page .block:nth-child(#{$i}), .page .tile:nth-child(#{$i}) { animation-delay: #{($i - 1) * 40}ms; }
+}
+.switch:active > span { transform: scale(1.15); }
+.switchOn:active > span { transform: translateX(20rem) scale(1.1); }
+
+
+// ---- theme: light/dark switch on .shell (class .dark) ----
+.shell { --primary: #415f91; --on-primary: #ffffff; --primary-container: #d6e3ff; --secondary-container: #dae2f9; --on-secondary-container: #131c2c; --ink: #191c20; --ink-2: #44474e; --ink-3: #74777f; --line: #c4c6d0; --surface: #ecedf5; --surface-hi: #e1e2ea; --card: #f3f3fa; --bg: #f9f9ff; --shade: 25,28,32; --bgc: 249,249,255; --hover: #c9d5ec;}
+.shell.dark { --primary: #aac7ff; --on-primary: #0a305f; --primary-container: #284777; --secondary-container: #3e4759; --on-secondary-container: #dae2f9; --ink: #e2e2e9; --ink-2: #c4c6d0; --ink-3: #8e9099; --line: #44474e; --surface: #1e2227; --surface-hi: #2c3036; --card: #191c20; --bg: #111318; --shade: 226,226,233; --bgc: 17,19,24; --hover: #3a4a66; color-scheme: dark; }
+.dark {
+    .ptileIcon { background-color: #2c3036; }
+    .ptileNote { color: rgba(var(--shade), 0.7); }
+    .toneTeal { background-color: #123a35; .ptileFill { background-color: #1f5c54; } }
+    .toneGreen { background-color: #1c3a1f; .ptileFill { background-color: #2f5c33; } }
+    .tonePurple { background-color: #33264a; .ptileFill { background-color: #4f3b78; } }
+    .toneAmber { background-color: #4a3512; .ptileFill { background-color: #70501c; } }
+    .toneBlue { background-color: #1c3350; .ptileFill { background-color: #2c4f7c; } }
+    .toneRose { background-color: #4a2420; .ptileFill { background-color: #70372f; } }
+    .chip_ok { background-color: #1c3d20; color: #b5e8b8; }
+    .chip_warn { background-color: #4a3512; color: #f7d9a0; }
+    .chip_bad { background-color: #4f1f1b; color: #ffb4a9; }
+    .sevTag_high { background-color: #5c1a17; color: #ffdad6; }
+    .sevTag_medium { background-color: #5c3410; color: #ffdcbe; }
+    .sevTag_low { background-color: #1c4026; color: #c2efcb; }
+    .mapControls > button { color: #d6e3ff; &:hover { background-color: var(--hover); } }
+}
+.themeBtn { position: absolute; right: 48rem; top: 0; display: flex; align-items: center; justify-content: center; width: 40rem; height: 40rem; border-radius: 20rem; background-color: $surface-hi; border: 1rem solid $line; color: $ink-2; cursor: pointer; outline: none;
+    transition: background-color $motion, color $motion, transform $press;
+    svg { width: 22rem; height: 22rem; animation: ems-pop 0.28s $ease-out both; }
+    &:hover { color: $ink; }
+    &:active { transform: scale(0.94); }
+    &:focus-visible { box-shadow: $focus; }
+}
+
+// ---- trend card (title, value, dotted target band, line with dots) ----
+.trendValue { margin-top: 4rem; font-size: 32rem; line-height: 40rem; font-weight: 400; color: $ink; font-variant-numeric: tabular-nums; }
+.trend { position: relative; height: 96rem; margin: 12rem 0 6rem; }
+.trendBand { position: absolute; left: 0; right: 0; border-radius: 12rem; border: 2rem dotted rgba(42, 163, 85, 0.55); background-color: rgba(42, 163, 85, 0.1); }
+.trendSvg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.trendDot { position: absolute; width: 10rem; height: 10rem; margin: -5rem 0 0 -5rem; border-radius: 5rem; }
+.trendChip { display: inline-block; margin-top: 10rem; }

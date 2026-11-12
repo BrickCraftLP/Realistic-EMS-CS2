@@ -5,12 +5,17 @@
   <PropertyGroup>
     <AssemblyName>RealisticEMS</AssemblyName>
     <RootNamespace>RealisticEMS</RootNamespace>
-    <Version>26.0.1</Version>
+    <Version>26.0.2</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- Source: https://www.einsatzcodes.at/export.php (Einsatzcodes Wien). Edit the CSV to change codes/units. -->
     <EmbeddedResource Include="Data\einsatzcodes.csv" LogicalName="RealisticEMS.Data.einsatzcodes.csv" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ships with the mod: Apache 2.0 requires the license text alongside the bundled Material Icons. -->
+    <None Include="..\THIRD_PARTY_LICENSES.txt" Link="THIRD_PARTY_LICENSES.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,6 +26,7 @@
     <Reference Include="Colossal.Localization" Private="false" />
     <Reference Include="Colossal.UI.Binding" Private="false" />
     <Reference Include="Colossal.Mathematics" Private="false" />
+    <Reference Include="Colossal.Collections" Private="false" />
     <Reference Include="Unity.Entities" Private="false" />
     <Reference Include="Unity.Collections" Private="false" />
     <Reference Include="Unity.Mathematics" Private="false" />

@@ -33,6 +33,8 @@ namespace RealisticEMS
                 int i = sections.FindIndex(s => s?.GetType() == typeof(VehiclesSection));
                 if (i >= 0) sections[i] = world.GetOrCreateSystemManaged<VehicleStateSection>();
                 else Mod.log.Warn("VehiclesSection not found, building panel shows vanilla vehicle states");
+                CallInfoSection.Install(world, sections);
+                StationCallsignSection.Install(world, sections);
             }
             catch (Exception ex) { Mod.log.Error(ex, "VehicleStateSection.Install failed"); }
         }

@@ -58,6 +58,10 @@ namespace RealisticEMS
         /// <summary>Debug tab: patients whose next call gets a locked door regardless of chance or building type.</summary>
         public static readonly HashSet<Entity> ForceLocked = new HashSet<Entity>();
 
+        /// <summary>Call patient of a police car / fire engine sent by this system, else Entity.Null. Read by CallInfoSection.</summary>
+        public Entity PatientOf(Entity car) => m_Cars.TryGetValue(car, out var c) ? c.Patient : Entity.Null;
+        public IEnumerable<Entity> CarsOf(Entity patient) { foreach (var kv in m_Cars) if (kv.Value.Patient == patient) yield return kv.Key; }
+
         public override int GetUpdateInterval(SystemUpdatePhase phase) => 16;
         // The frame PoliceCarAISystem runs (FireEngineAISystem: one before), right after their arrival check.
         public override int GetUpdateOffset(SystemUpdatePhase phase) => 5;

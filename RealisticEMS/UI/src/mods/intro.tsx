@@ -34,7 +34,7 @@ function sampler(d) {
         else if (cmd === "V") { y = n(); P.push([x, y]); }
         else if (cmd === "C") {
             const x1 = n(), y1 = n(), x2 = n(), y2 = n(), x3 = n(), y3 = n();
-            for (let k = 1; k <= 24; k++) { const u = k / 24, v = 1 - u;
+            for (let k = 1; k <= 64; k++) { const u = k / 64, v = 1 - u;
                 P.push([v*v*v*x + 3*v*v*u*x1 + 3*v*u*u*x2 + u*u*u*x3, v*v*v*y + 3*v*v*u*y1 + 3*v*u*u*y2 + u*u*u*y3]); }
             x = x3; y = y3;
         } else i++;
@@ -56,7 +56,7 @@ const now = () => (window.performance ? performance.now() : Date.now());
 let lang = lang0, step = 0, raf = 0;
 const ENUMS = { CallMix: ["Realistic", "Balanced", "Dramatic"], CallVolume: ["Few", "Balanced", "Many"] };
 const S = { OnlyDepotsDispatch: true, AvailableOnlyAtDepot: true, CallVolume: "Balanced", CallMix: "Realistic", EnableNef: false, OnSceneMinutes: 60, ParkOnSidewalk: true,
-    EmergencyCorridor: true, OncomingOvertake: true, EmergencyLaneChange: true, ClearRedLight: true, BedCapacityPercent: 25, RejectFullHospitals: true };
+    EmergencyCorridor: true, OncomingOvertake: true, EmergencyLaneChange: true, ClearRedLight: true, SirenOnlyWhenNeeded: false, BedCapacityPercent: 25, RejectFullHospitals: true };
 cur.forEach(it => { if (it.name in S) S[it.name] = ENUMS[it.name] ? ENUMS[it.name][it.value] ?? S[it.name] : it.bool ? !!it.value : it.value; });
 
 const T = {
@@ -72,10 +72,11 @@ const T = {
    {t:"Emergency doctor",s:"Should hospitals also send an emergency doctor car? (experimental)"},
    {t:"On-scene time",s:"How long do crews care for the patient?"},
    {t:"Parking",s:"Where does the ambulance park while caring?"},
-   {t:"Emergency corridor",s:"Do cars make room when the ambulance is stuck?"},
-   {t:"Oncoming lane",s:"May the ambulance overtake the queue on the oncoming lane?"},
-   {t:"Lane change",s:"May the ambulance switch to a free neighbouring lane?"},
+   {t:"Emergency corridor",s:"Do cars form a corridor for emergency vehicles?"},
+   {t:"Oncoming lane",s:"May emergency vehicles overtake the queue on the oncoming lane?"},
+   {t:"Lane change",s:"May emergency vehicles switch to a free lane?"},
    {t:"Red lights",s:"May cars ahead run the red light to clear the way?"},
+   {t:"Siren",s:"When should emergency vehicles use their siren?"},
    {t:"Hospital beds",s:"How many beds do hospitals have compared to vanilla?"},
    {t:"Full hospitals",s:"Should ambulances skip hospitals that are full?"},
    {t:"Saved",s:""}]},
@@ -91,10 +92,11 @@ const T = {
    {t:"Notarzt",s:"Sollen Krankenhäuser zusätzlich einen Notarzt schicken? (experimentell)"},
    {t:"Versorgungszeit",s:"Wie lange versorgt die Besatzung den Patienten?"},
    {t:"Parken",s:"Wo parkt der Rettungswagen während der Versorgung?"},
-   {t:"Rettungsgasse",s:"Machen Autos Platz, wenn der Rettungswagen feststeckt?"},
-   {t:"Gegenfahrbahn",s:"Darf der Rettungswagen die Schlange auf der Gegenfahrbahn überholen?"},
-   {t:"Spurwechsel",s:"Darf der Rettungswagen auf eine freie Nachbarspur wechseln?"},
+   {t:"Rettungsgasse",s:"Bilden Autos eine Rettungsgasse für Einsatzfahrzeuge?"},
+   {t:"Gegenfahrbahn",s:"Dürfen Einsatzfahrzeuge die Schlange auf der Gegenfahrbahn überholen?"},
+   {t:"Spurwechsel",s:"Dürfen Einsatzfahrzeuge auf eine freie Spur wechseln?"},
    {t:"Rote Ampeln",s:"Dürfen Autos davor bei Rot fahren, um Platz zu machen?"},
+   {t:"Sirene",s:"Wann sollen Einsatzfahrzeuge die Sirene nutzen?"},
    {t:"Krankenhausbetten",s:"Wie viele Betten haben Krankenhäuser im Vergleich zum Standard?"},
    {t:"Volle Krankenhäuser",s:"Soll der Rettungswagen volle Krankenhäuser überspringen?"},
    {t:"Gespeichert",s:""}]}
@@ -103,7 +105,7 @@ const T = {
 root.innerHTML = `<div class="card"><div class="top"><div class="head"><h2 id="h"></h2><p class="sub" id="sub"></p></div><div class="corner"><button id="skip"></button></div></div>`
     + `<div class="stage" id="stage"></div><div class="lower"><div class="body" id="body"></div><div class="nav"><button id="back"></button><button id="next" class="go"></button><span></span></div><div class="dots" id="dots"></div></div></div>`;
 
-const N = 14;
+const N = 15;
 const $ = s => root.querySelector(s);
 const sq=(w,h,k)=>{const x=w/2,y=h/2;return `M${-x+k} ${-y}H${x-k}C${x} ${-y} ${x} ${-y} ${x} ${-y+k}V${y-k}C${x} ${y} ${x} ${y} ${x-k} ${y}H${-x+k}C${-x} ${y} ${-x} ${y} ${-x} ${y-k}V${-y+k}C${-x} ${-y} ${-x} ${-y} ${-x+k} ${-y}Z`};
 const CARS=[[100,100],[100,204],[100,308],[200,100],[200,204],[200,308]];
@@ -122,7 +124,7 @@ function rig(svg){
   const geo=sampler(svg.querySelector(".geo").getAttribute("d")), L=geo.L, q=n=>svg.querySelector(n);
   const a=geo.at(0),a1=geo.at(1),z=geo.at(L),z1=geo.at(L-1);
   const pt=d=>d<0?[a.x+(a1.x-a.x)*d,a.y+(a1.y-a.y)*d]:d>L?[z.x+(z.x-z1.x)*(d-L),z.y+(z.y-z1.y)*(d-L)]:(p=>[p.x,p.y])(geo.at(d));
-  const frame=(d,o)=>{const [x,y]=pt(d),[x1,y1]=pt(d+.5),[x0,y0]=pt(d-.5),m=Math.hypot(x1-x0,y1-y0)||1;return [x-(y1-y0)/m*o,y+(x1-x0)/m*o]};
+  const frame=(d,o)=>{const [x,y]=pt(d),[x1,y1]=pt(d+4),[x0,y0]=pt(d-4)/* ±4: smooth normal over the polyline */,m=Math.hypot(x1-x0,y1-y0)||1;return [x-(y1-y0)/m*o,y+(x1-x0)/m*o]};
   const ribbon=(s,a,b,hw,k,c=0)=>{const n=30,len=b-a,kk=Math.min(k,hw,len/2),A=[],B=[];
     for(let i=0;i<=n;i++){const u=i/n,e=Math.min(u,1-u)*len,w=e<kk?hw-kk+kk*Math.cbrt(1-(1-e/kk)**3):hw;
       A.push(frame(s-a-u*len,c+w));B.push(frame(s-a-u*len,c-w));}
@@ -281,6 +283,54 @@ function initOnc(svg,m){
   };
 }
 
+// ---- Siren (prototype/siren.js): same drive in both panels, bottom to top: queue passed on the oncoming lane, then a red light.
+// Left: siren the whole way. Right: only in the jam, on the oncoming lane and at the red light.
+const SIR_TXT={
+  en:{tags:["Siren always on","Siren only when needed"],on:"Siren on",off:"Siren off",jam:"Siren: traffic jam",onc:"Siren: oncoming",red:"Siren: red light"},
+  de:{tags:["Sirene immer an","Sirene nur bei Bedarf"],on:"Sirene an",off:"Sirene aus",jam:"Sirene: Stau",onc:"Sirene: Gegenverkehr",red:"Sirene: rote Ampel"}};
+const SIR_ROUTE="M205 700V520C205 420 124 430 124 330V40C124 -60 205 -50 205 -150V-350";
+const SIR_ZONES=[[520,330,"jam"],[330,160,"onc"],[160,30,"red"]];
+const SIR_HEAD=560, SIR_END=-130;
+const sirSvg=()=>SV(
+  `<rect width="300" height="500" fill="#808080"/><rect x="40" width="220" height="500" fill="#262626"/>${DEFS}`
+  +`<path d="M150 0V500" stroke="#8a8a8a" stroke-width="3" stroke-dasharray="16 14"/>`
+  +`<rect x="0" y="60" width="300" height="80" fill="#262626"/><path d="M0 100H40M260 100H300" stroke="#8a8a8a" stroke-width="3" stroke-dasharray="16 14"/>`
+  +`<path d="M150 150H260M40 52H150" stroke="#e8e8e8" stroke-width="4"/>`
+  +`<path d="${sq(16,40,6)}" transform="translate(268 168)" fill="#14202e"/><circle cx="268" cy="158" r="5" fill="#ff4d4d"/><circle cx="268" cy="178" r="5" fill="#4ade80" opacity=".2"/>`
+  +`<path class="geo" d="${SIR_ROUTE}" fill="none"/><g class="fade">`
+  +[0,1].map(()=>`<path class="q" d="${sq(70,44,14)}" fill="#8a94a6"/>`).join("")
+  +`<path class="o1" d="${sq(70,44,14)}" fill="#a3acba"/><path class="o2" d="${sq(70,44,14)}" fill="#6f7a8d"/>`
+  +AMB
+  +`<g class="wv" fill="none" stroke="#ffe14d" stroke-width="5" stroke-linecap="round">${[0,1,2].map(()=>`<path d="M-26 -22Q0 -40 26 -22"/>`).join("")}</g>`
+  +`<g transform="translate(22 458)"><rect class="pl" width="150" height="30" rx="15" fill="#000" opacity=".65"/>`
+  +`<g transform="translate(16 15)"><g class="son"><path d="M-6 -3h3l5 -4v14l-5 -4h-3z" fill="#ffe14d"/><path d="M6 -5q4 5 0 10" fill="none" stroke="#ffe14d" stroke-width="2" stroke-linecap="round"/></g>`
+  +`<g class="soff"><path d="M-6 -3h3l5 -4v14l-5 -4h-3z" fill="#8fa0b8"/><path d="M-9 9L9 -9" stroke="#ff4d4d" stroke-width="2.5" stroke-linecap="round"/></g></g>`
+  +`<text class="rt" x="32" y="20" font-size="14" font-weight="600" fill="#fff"></text></g></g>`);
+const sirStage=()=>PANELS(2,SIR_TXT[lang].tags,sirSvg);
+function initSiren(svg,m){
+  const r=rig(svg), L=r.L, q=n=>svg.querySelector(n), geo=sampler(SIR_ROUTE), wv=q(".wv"), arcs=Array.from(wv.children);
+  const o=[q(".o1"),q(".o2")], rt=q(".rt"), pl=q(".pl"), TX=SIR_TXT[lang];
+  Array.from(svg.querySelectorAll(".q")).forEach((el,i)=>place(el,205,290-i*76));
+  const at=s=>geo.at(Math.max(0,Math.min(L,s)));
+  const sAt=y=>{let a=0,b=L;for(let i=0;i<30;i++){const c=(a+b)/2;if(at(c).y>y)a=c;else b=c}return a};
+  const s0=sAt(SIR_HEAD), s1=sAt(SIR_END);
+  const win=(h,a,b)=>EIO((a-h)/20)*EIO((h-b)/20);
+  let last="";
+  return t=>{
+    q(".fade").setAttribute("opacity",FADE(t));
+    const p=clamp((t-.6)/8.8), s=s0+(s1-s0)*(.6*p+.4*EIO(p)), P=at(s), P1=at(s+1), P0=at(s-1), hy=P.y;
+    r.draw(s,t);
+    [-130,-297].forEach((c0,i)=>{const yc=c0+1.38*(SIR_HEAD-hy),k=EIO(2*(1-Math.abs(yc-hy)/220));place(o[i],95-37*k,yc,90)});
+    let amt=1,key="on";
+    if(m){amt=win(hy,520,30);key=amt>.5?(SIR_ZONES.find(z=>hy<=z[0]&&hy>z[1])||[0,0,"off"])[2]:"off"}
+    wv.setAttribute("opacity",amt);
+    wv.setAttribute("transform",`translate(${P.x} ${P.y}) rotate(${Math.atan2(P1.y-P0.y,P1.x-P0.x)*180/Math.PI+90})`);
+    arcs.forEach((a,i)=>{const u=(t/.9+i/3)%1;a.setAttribute("opacity",(1-u)*.9);a.setAttribute("transform",`translate(0 ${-6-u*34}) scale(${.7+.5*u})`)});
+    q(".son").setAttribute("opacity",amt>.5?1:0);q(".soff").setAttribute("opacity",amt>.5?0:1);
+    if(key!==last){last=key;rt.textContent=TX[key];pl.setAttribute("width",44+TX[key].length*7.4)}
+  };
+}
+
 // ---- Bed capacity: 5 %, 10 % or a custom value (slider 5-50 %). 10 bed icons on a compressed scale.
 const BED_V=[5,10,"custom"];
 let bedCustom=S.BedCapacityPercent!==5&&S.BedCapacityPercent!==10, BED_CUSTOM=bedCustom?Math.max(5,Math.min(50,S.BedCapacityPercent)):25;
@@ -341,9 +391,10 @@ const PG={
   9:{key:"OncomingOvertake",vals:[false,true],stage:onstage,init:initOnc},
   10:{key:"EmergencyLaneChange",vals:[false,true],stage:lstage,init:initLane},
   11:{key:"ClearRedLight",vals:[false,true],stage:rstage,init:initRed},
-  12:{key:"BedCapacityPercent",vals:BED_V,stage:bstage,stack:1,
+  12:{key:"SirenOnlyWhenNeeded",vals:[false,true],stage:sirStage,init:initSiren},
+  13:{key:"BedCapacityPercent",vals:BED_V,stage:bstage,stack:1,
      set:v=>{bedCustom=v==="custom";S.BedCapacityPercent=bedCustom?BED_CUSTOM:v},isSel:v=>v==="custom"?bedCustom:!bedCustom&&S.BedCapacityPercent===v},
-  13:{key:"RejectFullHospitals",vals:[false,true],stage:hstage,init:initHosp}
+  14:{key:"RejectFullHospitals",vals:[false,true],stage:hstage,init:initHosp}
 };
 const panels=()=>Array.from($("#stage").children);
 function syncSel(){const g=PG[step];panels().forEach((p,i)=>p.classList.toggle("sel",!!g&&(g.isSel?g.isSel(g.vals[i]):S[g.key]===g.vals[i])))}

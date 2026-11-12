@@ -21,11 +21,19 @@ namespace RealisticEMS
     {
         public const float FramesPerGameMinute = TimeSystem.kTicksPerDay / 1440f;
 
-        private class Care { public uint Arrive, Start; }
+        private class Care { public uint Dispatch, Arrive, NefArrive, Start, Transport; }
         private readonly Dictionary<Entity, Care> m_Care = new Dictionary<Entity, Care>(); // patient -> on-scene times
         private EntityQuery m_Ambulances;
         private SimulationSystem m_Sim;
         private UnitNamingSystem m_Units;
+
+        /// <summary>Game frames of a call's milestones (0 = not yet). Read by CallInfoSection.</summary>
+        public bool TryGetTimes(Entity patient, out uint dispatch, out uint arrive, out uint nefArrive, out uint start, out uint transport)
+        {
+            bool ok = m_Care.TryGetValue(patient, out var c);
+            dispatch = c?.Dispatch ?? 0; arrive = c?.Arrive ?? 0; nefArrive = c?.NefArrive ?? 0; start = c?.Start ?? 0; transport = c?.Transport ?? 0;
+            return ok;
+        }
 
         public override int GetUpdateInterval(SystemUpdatePhase phase) => 16;
 
@@ -73,9 +81,32 @@ namespace RealisticEMS
             }
         }
 
+        private Game.Notifications.IconCommandSystem m_Icons;
+        private EntityQuery m_HealthcareParams;
+
+        /// <summary>
+        /// Vanilla HealthProblemSystem counts HealthProblem.m_Timer up while the patient still needs a vehicle and shows
+        /// "ambulance has not arrived" when it runs out; it only clears that once the patient boards. With the on-scene
+        /// care hold the patient boards minutes after arrival, so the icon appeared with the crew already there.
+        /// The ambulance is on scene: reset the timer and remove the icon.
+        /// </summary>
+        private void ClearWaitIcon(Entity patient)
+        {
+            var em = EntityManager;
+            if (!em.HasComponent<Game.Citizens.HealthProblem>(patient) || m_HealthcareParams.IsEmptyIgnoreFilter) return;
+            var hp = em.GetComponentData<Game.Citizens.HealthProblem>(patient);
+            if (hp.m_Timer == 0) return;
+            hp.m_Timer = 0;
+            em.SetComponentData(patient, hp);
+            var prefab = m_HealthcareParams.GetSingleton<Game.Prefabs.HealthcareParameterData>().m_AmbulanceNotificationPrefab;
+            m_Icons.CreateCommandBuffer().Remove(patient, prefab);
+        }
+
         protected override void OnCreate()
         {
             base.OnCreate();
+            m_Icons = World.GetOrCreateSystemManaged<Game.Notifications.IconCommandSystem>();
+            m_HealthcareParams = GetEntityQuery(ComponentType.ReadOnly<Game.Prefabs.HealthcareParameterData>());
             m_Sim = World.GetOrCreateSystemManaged<SimulationSystem>();
             m_Units = World.GetOrCreateSystemManaged<UnitNamingSystem>();
             m_Ambulances = GetEntityQuery(ComponentType.ReadOnly<Ambulance>(), ComponentType.ReadOnly<PathOwner>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
@@ -106,22 +137,31 @@ namespace RealisticEMS
                 if (NefDispatchSystem.IsNef(em, rtw)) continue;
                 var a = em.GetComponentData<Ambulance>(rtw);
                 var p = a.m_TargetPatient;
+                if (p != Entity.Null && (a.m_State & AmbulanceFlags.Transporting) != 0 && m_Care.TryGetValue(p, out var tc))
+                {
+                    seen.Add(p); // keep the times for the info panel until the patient is delivered
+                    if (tc.Transport == 0) tc.Transport = now;
+                    continue;
+                }
                 if (p == Entity.Null || (a.m_State & AmbulanceFlags.Dispatched) == 0
                     || (a.m_State & (AmbulanceFlags.Transporting | AmbulanceFlags.Returning)) != 0) continue;
                 bool nefInvolved = NefDispatchSystem.NefByPatient.TryGetValue(p, out var nef);
-                if (care == 0 && !nefInvolved) continue;
                 seen.Add(p);
+                if (!m_Care.TryGetValue(p, out var c)) m_Care[p] = c = new Care { Dispatch = now };
+                if (nefInvolved && c.NefArrive == 0 && nef != Entity.Null && em.Exists(nef) && OnScene(em, nef)) c.NefArrive = now;
+                if (care == 0 && !nefInvolved) continue;
                 // Held already on the way: the patient boards in the first frame AtTarget is visible.
                 if (!OnScene(em, rtw)) { held.Add(rtw); continue; }
 
                 string unit = m_Units.CallsignOf(rtw);
-                if (!m_Care.TryGetValue(p, out var c))
+                if (c.Arrive == 0)
                 {
-                    m_Care[p] = c = new Care { Arrive = now };
+                    c.Arrive = now;
                     if (!nefInvolved) c.Start = now;
                     Mod.log.Info($"{unit} vor Ort, {(nefInvolved ? "wartet auf NEF" : $"versorgt Patient ({Mod.Setting.OnSceneMinutes} min)")}");
                 }
                 else if (c.Start == 0 && !nefInvolved) c.Start = now; // NEF mission ended: start alone
+                ClearWaitIcon(p);
                 if (c.Start == 0 && nefInvolved)
                 {
                     bool nefOnScene = nef != Entity.Null && em.Exists(nef) && OnScene(em, nef)

@@ -116,10 +116,11 @@ pre{background:#0b111b;border:1px solid var(--line);border-radius:10px;padding:1
 <script src="drive.js"></script>
 <script src="beds.js"></script>
 <script src="calls.js"></script>
+<script src="siren.js"></script>
 <script>
 // Defaults/ranges mirror RealisticEMS/Setting.cs
 const DEFAULTS={
-  realistic:{OnlyDepotsDispatch:true,AvailableOnlyAtDepot:true,CallVolume:"Balanced",CallMix:"Realistic",EnableNef:false,OnSceneMinutes:60,ParkOnSidewalk:true,EmergencyCorridor:true,OncomingOvertake:true,EmergencyLaneChange:true,ClearRedLight:true,BedCapacityPercent:25,RejectFullHospitals:true}
+  realistic:{OnlyDepotsDispatch:true,AvailableOnlyAtDepot:true,CallVolume:"Balanced",CallMix:"Realistic",EnableNef:false,OnSceneMinutes:60,ParkOnSidewalk:true,EmergencyCorridor:true,OncomingOvertake:true,EmergencyLaneChange:true,ClearRedLight:true,SirenOnlyWhenNeeded:false,BedCapacityPercent:25,RejectFullHospitals:true}
 };
 const S={...DEFAULTS.realistic};
 let lang=(navigator.language||"en").startsWith("de")?"de":"en", step=0;
@@ -142,6 +143,7 @@ const T={
    {t:"Oncoming lane",s:"May the ambulance overtake the queue on the oncoming lane?"},
    {t:"Lane change",s:"May the ambulance switch to a free neighbouring lane?"},
    {t:"Red lights",s:"May cars ahead run the red light to clear the way?"},
+   {t:"Siren",s:"When should emergency vehicles use their siren?"},
    {t:"Hospital beds",s:"How many beds do hospitals have compared to vanilla?"},
    {t:"Full hospitals",s:"Should ambulances skip hospitals that are full?"},
    {t:"Saved",s:""}]},
@@ -162,12 +164,13 @@ const T={
    {t:"Gegenfahrbahn",s:"Darf der Rettungswagen die Schlange auf der Gegenfahrbahn überholen?"},
    {t:"Spurwechsel",s:"Darf der Rettungswagen auf eine freie Nachbarspur wechseln?"},
    {t:"Rote Ampeln",s:"Dürfen Autos davor bei Rot fahren, um Platz zu machen?"},
+   {t:"Sirene",s:"Wann sollen Einsatzfahrzeuge die Sirene nutzen?"},
    {t:"Krankenhausbetten",s:"Wie viele Betten haben Krankenhäuser im Vergleich zum Standard?"},
    {t:"Volle Krankenhäuser",s:"Soll der Rettungswagen volle Krankenhäuser überspringen?"},
    {t:"Gespeichert",s:""}]}
 };
 
-const N=14;
+const N=15;
 const $=s=>document.querySelector(s);
 // squircle-ish rounded rect centred on 0,0: both bezier handles on the corner give zero curvature at the joins
 const sq=(w,h,k)=>{const x=w/2,y=h/2;return `M${-x+k} ${-y}H${x-k}C${x} ${-y} ${x} ${-y} ${x} ${-y+k}V${y-k}C${x} ${y} ${x} ${y} ${x-k} ${y}H${-x+k}C${-x} ${y} ${-x} ${y} ${-x} ${y-k}V${-y+k}C${-x} ${-y} ${-x} ${-y} ${-x+k} ${-y}Z`};
@@ -187,11 +190,30 @@ const scene=m=>`<svg viewBox="0 0 300 500" preserveAspectRatio="xMidYMid slice">
 const stage=()=>[0,1].map(m=>`<div class="panel" aria-hidden="true"><span class="tag">${T[lang].tags[m]}</span>${scene(m)}</div>`).join("");
 // Bendable ambulance. Needs a .geo path (its route) plus the AMB elements in the svg. draw(s,t): head is s units along the route,
 // body is rebuilt every frame as a ribbon along the route, so the whole shape bends. Route is extended straight past both ends.
+// Polyline sampler (same as intro.tsx): getPointAtLength is slow when called ~1000x per frame, and Gameface lacks it.
+function sampler(d){
+  const tk=d.match(/[A-Za-z]|-?[\d.]+/g),P=[];let i=0,x=0,y=0,cmd="";const n=()=>+tk[i++];
+  while(i<tk.length){
+    if(/[A-Za-z]/.test(tk[i]))cmd=tk[i++];
+    if(cmd==="M"||cmd==="L"){x=n();y=n();P.push([x,y])}
+    else if(cmd==="H"){x=n();P.push([x,y])}
+    else if(cmd==="V"){y=n();P.push([x,y])}
+    else if(cmd==="C"){const x1=n(),y1=n(),x2=n(),y2=n(),x3=n(),y3=n();
+      for(let k=1;k<=64;k++){const u=k/64,v=1-u;P.push([v*v*v*x+3*v*v*u*x1+3*v*u*u*x2+u*u*u*x3,v*v*v*y+3*v*v*u*y1+3*v*u*u*y2+u*u*u*y3])}
+      x=x3;y=y3}
+    else i++;
+  }
+  const C=[0];for(let k=1;k<P.length;k++)C.push(C[k-1]+Math.hypot(P[k][0]-P[k-1][0],P[k][1]-P[k-1][1]));
+  return {L:C[C.length-1],at(s){if(P.length<2)return {x:P[0][0],y:P[0][1]};
+    let lo=0,hi=C.length-1;while(hi-lo>1){const m=(lo+hi)>>1;if(C[m]<=s)lo=m;else hi=m}
+    const f=Math.max(0,Math.min(1,(s-C[lo])/(C[hi]-C[lo]||1)));
+    return {x:P[lo][0]+(P[hi][0]-P[lo][0])*f,y:P[lo][1]+(P[hi][1]-P[lo][1])*f}}};
+}
 function rig(svg){
-  const geo=svg.querySelector(".geo"), L=geo.getTotalLength(), q=n=>svg.querySelector(n);
-  const a=geo.getPointAtLength(0),a1=geo.getPointAtLength(1),z=geo.getPointAtLength(L),z1=geo.getPointAtLength(L-1);
-  const pt=d=>d<0?[a.x+(a1.x-a.x)*d,a.y+(a1.y-a.y)*d]:d>L?[z.x+(z.x-z1.x)*(d-L),z.y+(z.y-z1.y)*(d-L)]:(p=>[p.x,p.y])(geo.getPointAtLength(d));
-  const frame=(d,o)=>{const [x,y]=pt(d),[x1,y1]=pt(d+.5),[x0,y0]=pt(d-.5),m=Math.hypot(x1-x0,y1-y0)||1;return [x-(y1-y0)/m*o,y+(x1-x0)/m*o]};
+  const geo=sampler(svg.querySelector(".geo").getAttribute("d")), L=geo.L, q=n=>svg.querySelector(n);
+  const a=geo.at(0),a1=geo.at(1),z=geo.at(L),z1=geo.at(L-1);
+  const pt=d=>d<0?[a.x+(a1.x-a.x)*d,a.y+(a1.y-a.y)*d]:d>L?[z.x+(z.x-z1.x)*(d-L),z.y+(z.y-z1.y)*(d-L)]:(p=>[p.x,p.y])(geo.at(d));
+  const frame=(d,o)=>{const [x,y]=pt(d),[x1,y1]=pt(d+4),[x0,y0]=pt(d-4)/* ±4: normal averaged over several polyline pieces, no stepping */,m=Math.hypot(x1-x0,y1-y0)||1;return [x-(y1-y0)/m*o,y+(x1-x0)/m*o]};
   const ribbon=(s,a,b,hw,k,c=0)=>{const n=30,len=b-a,kk=Math.min(k,hw,len/2),A=[],B=[];
     for(let i=0;i<=n;i++){const u=i/n,e=Math.min(u,1-u)*len,w=e<kk?hw-kk+kk*Math.cbrt(1-(1-e/kk)**3):hw;
       A.push(frame(s-a-u*len,c+w));B.push(frame(s-a-u*len,c-w));}
@@ -257,9 +279,10 @@ const PG={
   9:{key:"OncomingOvertake",vals:[false,true],stage:onstage,init:initOnc},
   10:{key:"EmergencyLaneChange",vals:[false,true],stage:lstage,init:initLane},
   11:{key:"ClearRedLight",vals:[false,true],stage:rstage,init:initRed},
-  12:{key:"BedCapacityPercent",vals:BED_V,stage:bstage,stack:1,
+  12:{key:"SirenOnlyWhenNeeded",vals:[false,true],stage:sirStage,init:initSiren},
+  13:{key:"BedCapacityPercent",vals:BED_V,stage:bstage,stack:1,
      set:v=>{bedCustom=v==="custom";S.BedCapacityPercent=bedCustom?BED_CUSTOM:v},isSel:v=>v==="custom"?bedCustom:!bedCustom&&S.BedCapacityPercent===v},
-  13:{key:"RejectFullHospitals",vals:[false,true],stage:hstage,init:initHosp}
+  14:{key:"RejectFullHospitals",vals:[false,true],stage:hstage,init:initHosp}
 };
 // blue outline marks the panel that matches the current setting
 
@@ -293,6 +316,7 @@ document.addEventListener("click",e=>{
   else if(b.id==="reopen"){b.hidden=true;$(".app").hidden=false;step=0;render();}
 });
 document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches("#stage .panel")){e.preventDefault();e.target.click()}});
+if(location.hash==="#siren")step=12; // review shortcut: open straight on the siren page
 render();
 </script>
 </body>

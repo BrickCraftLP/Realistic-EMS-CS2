@@ -1,3 +1,4 @@
+using Colossal.Entities;
 using Game;
 using Game.Buildings;
 using Game.Common;
@@ -13,13 +14,18 @@ namespace RealisticEMS
 {
     /// <summary>
     /// Gives every ambulance a callsign "RTW {station}-{nn}" and, while on a call, appends the call's AMPDS code.
-    /// Police cars get "POL {station}-{nn}" (callsign only, no code); their stations are numbered separately.
+    /// Police cars get "POL {station}-{nn}", fire engines "FW {station}-{nn}" (callsign only, no code).
+    /// {station} = the player-set StationCallsign of the owning building, else its number (numbered per vehicle type).
     /// Shown via the vanilla custom-name mechanism, so it appears as the title of the vehicle info panel.
     /// The code is fixed when the ambulance gets a new patient (assigned at call-taking, like a real dispatch centre).
     /// </summary>
     public partial class UnitNamingSystem : GameSystemBase
     {
-        private EntityQuery m_Query, m_Police;
+        private EntityQuery m_Query, m_Police, m_Fire;
+        private static readonly HashSet<Entity> s_Renamed = new HashSet<Entity>();
+
+        /// <summary>Station callsign changed: its vehicles get new callsigns on the next update.</summary>
+        public static void RenameStation(Entity station) => s_Renamed.Add(station);
         private NameSystem m_NameSystem;
         private readonly Dictionary<Entity, string> m_Callsign = new Dictionary<Entity, string>();
         private readonly Dictionary<Entity, (Entity patient, AmpdsCode code)> m_Call = new Dictionary<Entity, (Entity, AmpdsCode)>();
@@ -33,7 +39,8 @@ namespace RealisticEMS
             m_NameSystem = World.GetOrCreateSystemManaged<NameSystem>();
             m_Query = GetEntityQuery(ComponentType.ReadOnly<Ambulance>(), ComponentType.ReadOnly<Owner>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
             m_Police = GetEntityQuery(ComponentType.ReadOnly<PoliceCar>(), ComponentType.ReadOnly<Owner>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
-            RequireAnyForUpdate(m_Query, m_Police);
+            m_Fire = GetEntityQuery(ComponentType.ReadOnly<FireEngine>(), ComponentType.ReadOnly<Owner>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
+            RequireAnyForUpdate(m_Query, m_Police, m_Fire);
         }
 
         /// <summary>Next free "{prefix}{nn}" for a new vehicle.</summary>
@@ -45,16 +52,21 @@ namespace RealisticEMS
             return $"{prefix}{n:00}";
         }
 
-        private void NamePolice()
+        /// <summary>Player-set station callsign, else the station's rank among stations of that vehicle type.</summary>
+        private string StationLabel(Entity owner, List<Entity> stations) =>
+            StationCallsignSection.Of(EntityManager, owner) ?? (stations.IndexOf(owner) + 1).ToString();
+
+        /// <summary>Callsign only, no code: police "POL x-nn", fire "FW x-nn".</summary>
+        private void NameSimple(EntityQuery query, string prefix)
         {
-            using var entities = m_Police.ToEntityArray(Allocator.Temp);
-            using var owners = m_Police.ToComponentDataArray<Owner>(Allocator.Temp);
+            using var entities = query.ToEntityArray(Allocator.Temp);
+            using var owners = query.ToComponentDataArray<Owner>(Allocator.Temp);
             var stations = owners.Select(o => o.m_Owner).Distinct().OrderBy(e => e.Index).ToList(); // same ponytail as RTW numbering
             for (int i = 0; i < entities.Length; i++)
             {
                 var e = entities[i];
                 if (!m_Callsign.TryGetValue(e, out var callsign))
-                    callsign = m_Callsign[e] = NewCallsign($"POL {stations.IndexOf(owners[i].m_Owner) + 1}-");
+                    callsign = m_Callsign[e] = NewCallsign($"{prefix} {StationLabel(owners[i].m_Owner, stations)}-");
                 if (!m_ShownName.TryGetValue(e, out var shown) || shown != callsign)
                 {
                     m_NameSystem.SetCustomName(e, callsign);
@@ -85,8 +97,15 @@ namespace RealisticEMS
             // Store a numbered component on the building if stable numbers across sessions matter.
             var stations = owners.Select(o => o.m_Owner).Distinct().OrderBy(e => e.Index).ToList();
             using var police = m_Police.ToEntityArray(Allocator.Temp);
+            using var fire = m_Fire.ToEntityArray(Allocator.Temp);
             var alive = new HashSet<Entity>(entities);
             alive.UnionWith(police);
+            alive.UnionWith(fire);
+            if (s_Renamed.Count > 0)
+            {
+                foreach (var v in m_Callsign.Keys.Where(v => EntityManager.TryGetComponent<Owner>(v, out var o) && s_Renamed.Contains(o.m_Owner)).ToList()) m_Callsign.Remove(v);
+                s_Renamed.Clear();
+            }
             foreach (var gone in m_Callsign.Keys.Where(e => !alive.Contains(e)).ToList()) { m_Callsign.Remove(gone); m_Call.Remove(gone); m_ShownName.Remove(gone); }
 
             for (int i = 0; i < entities.Length; i++)
@@ -95,7 +114,7 @@ namespace RealisticEMS
                 var a = ambulances[i];
                 if (!m_Callsign.TryGetValue(e, out var callsign))
                 {
-                    int station = stations.IndexOf(owners[i].m_Owner) + 1;
+                    string station = StationLabel(owners[i].m_Owner, stations);
                     callsign = m_Callsign[e] = NewCallsign($"{(NefDispatchSystem.IsNef(EntityManager, e) ? Mod.T("NEF", "DOC") : Mod.T("RTW", "AMB"))} {station}-");
                 }
 
@@ -122,7 +141,8 @@ namespace RealisticEMS
                     m_ShownName[e] = name;
                 }
             }
-            NamePolice();
+            NameSimple(m_Police, "POL");
+            NameSimple(m_Fire, Mod.T("FW", "FIRE"));
         }
     }
 }

@@ -9,14 +9,14 @@ namespace RealisticEMS
     /// <summary>Options: tabs and groups below; within a group, options appear in declaration order.</summary>
     [FileLocation(nameof(RealisticEMS))]
     [SettingsUITabOrder(Dispatch, Scene, Driving, General)]
-    [SettingsUIGroupOrder(Hospitals, Depots, Calls, Care, Doctor, Parking, WayAhead, Lanes, Corridor, Vehicles, About)]
-    [SettingsUIShowGroupName(Hospitals, Depots, Calls, Care, Doctor, Parking, WayAhead, Lanes, Corridor, Vehicles, About)]
+    [SettingsUIGroupOrder(Hospitals, Depots, Calls, Care, Doctor, Parking, WayAhead, Lanes, Corridor, Siren, About)]
+    [SettingsUIShowGroupName(Hospitals, Depots, Calls, Care, Doctor, Parking, WayAhead, Lanes, Corridor, Siren, About)]
     public class Setting : ModSetting
     {
         public const string Dispatch = "Dispatch", Scene = "Scene", Driving = "Driving", General = "General";
         public const string Hospitals = "Hospitals", Depots = "Depots", Calls = "Calls";
         public const string Care = "Care", Doctor = "Doctor", Parking = "Parking";
-        public const string WayAhead = "WayAhead", Lanes = "Lanes", Corridor = "Corridor",Vehicles = "Vehicles";
+        public const string WayAhead = "WayAhead", Lanes = "Lanes", Corridor = "Corridor", Siren = "Siren";
         public const string About = "About";
 
         public Setting(IMod mod) : base(mod) { SetDefaults(); } // ModSetting does not call it
@@ -100,20 +100,15 @@ namespace RealisticEMS
         [SettingsUISection(Driving, Lanes)]
         public bool EmergencyLaneChange { get; set; }
 
-        [SettingsUISection(Driving, Lanes)]
-        public bool TurnFromAnyLane { get; set; }
-
         [SettingsUISection(Driving, Corridor)]
         public bool EmergencyCorridor { get; set; }
 
         [SettingsUISection(Driving, Corridor)]
-        public bool MovingCorridor { get; set; }
-
-        [SettingsUISection(Driving, Corridor)]
         public bool OncomingOvertake { get; set; }
 
-        [SettingsUISection(Driving, Vehicles)]
-        public bool PoliceEmergencyDriving { get; set; }
+        /// <summary>Siren only in a jam/corridor, on the oncoming lane and at a red light; lights stay on (Driving/Siren.cs).</summary>
+        [SettingsUISection(Driving, Siren)]
+        public bool SirenOnlyWhenNeeded { get; set; }
 
         /// <summary>Set when the setup screen (UI/src/mods/intro.tsx) was closed; until then it opens on every game load.</summary>
         [SettingsUIHidden]
@@ -138,7 +133,7 @@ namespace RealisticEMS
         }
         private bool m_Log;
 
-        /// <summary>Button: copies the log into a signed export folder (LogExport).</summary>
+        /// <summary>Button: copies the log into an export folder (LogExport).</summary>
         [SettingsUISection(General, About)]
         [SettingsUIButton]
         public bool ExportLog { set => LogExport.Run(); }
@@ -166,12 +161,10 @@ namespace RealisticEMS
             PushBlockers = true;
             EmergencyLaneChange = true;
             EmergencyCorridor = true;
-            MovingCorridor = true;
             OncomingOvertake = true;
-            PoliceEmergencyDriving = true;
-            TurnFromAnyLane = true;
             ClearRedLight = true;
             ClearRedLightMaxCars = 2;
+            SirenOnlyWhenNeeded = false;
             LogAmbulanceStates = false;
             DebugPassword = "";
             DepotAmbulances = 10;
@@ -221,7 +214,7 @@ namespace RealisticEMS
             Group(Setting.WayAhead, "Weg freimachen", "Clearing the way");
             Group(Setting.Lanes, "Spuren", "Lanes");
             Group(Setting.Corridor, "Rettungsgasse und Überholen", "Emergency corridor and overtaking");
-            Group(Setting.Vehicles, "Fahrzeuge", "Vehicles");
+            Group(Setting.Siren, "Sirene", "Siren");
             Group(Setting.About, "Info", "About");
 
             Opt(nameof(Setting.Version), "Version", "Version", "Installierte Mod-Version.", "Installed mod version.");
@@ -270,39 +263,33 @@ namespace RealisticEMS
             Opt(nameof(Setting.ParkAtCrossing), "An Kreuzungen an den Ecken parken", "Park at corners at intersections",
                 "Liegt der Einsatzort an einer Kreuzung, parkt das erste Fahrzeug an einer Ecke, die anderen dahinter: in einer freien Parkspur (ist die Lücke zu kurz, schräg mit der Nase auf dem Gehsteig), auf breitem Gehsteig oder auf dem Grünstreifen, kurz nach dem Zebrastreifen. Passt die ganze Gruppe dort nicht hin, parkt sie weiter weg von der Kreuzung. Benötigt 'RTW/NEF parken vor Ort neben der Fahrbahn'.",
                 "If the scene is at an intersection, the first vehicle parks at a corner and the others behind it: in a free parking lane (angled with the nose on the sidewalk if the gap is too short), on a wide sidewalk or on the green strip, just past the crosswalk. If the whole group does not fit there, it parks further from the intersection. Requires 'Park off the road on scene'.");
-            Opt(nameof(Setting.PushBlockers), "RTW drängt Vordermann", "Ambulance pushes vehicles ahead",
-                "Fahrzeuge vor einem RTW mit Blaulicht werden sofort weitergeschoben (Vanilla macht das erst nach 5 s).",
-                "Vehicles in front of an ambulance with blue lights are pushed on immediately (vanilla waits 5 s).");
-            Opt(nameof(Setting.EmergencyLaneChange), "RTW wechselt auf freie Spur", "Ambulance switches to a free lane",
-                "Steht ein RTW mit Blaulicht im Stau und ist die Nachbarspur in gleicher Richtung ~40 m frei, überholt er dort und wechselt vor der Kreuzung zurück.",
-                "If an ambulance with blue lights is stuck in traffic and the neighbouring lane in the same direction is clear for ~40 m, it overtakes there and changes back before the intersection.");
-            Opt(nameof(Setting.TurnFromAnyLane), "RTW biegt von jeder Spur ab (experimentell)", "Ambulance turns from any lane (experimental)",
-                "Ist die Abbiegespur voll, bekommt der RTW eine temporäre Abbiegeverbindung nur für sich, direkt von seiner Spur. Wird danach sofort gelöscht. Nicht während eines laufenden Manövers speichern.",
-                "If the turn lane is full, the ambulance gets a temporary turn connection just for itself, straight from its lane. It is deleted right afterwards. Do not save during a manoeuvre.");
-            Opt(nameof(Setting.ClearRedLight), "Wartende vor dem RTW dürfen bei Rot fahren", "Cars ahead of the ambulance may run red lights",
-                "Stehen vor einem RTW mit Blaulicht nur wenige Autos an einer roten Ampel, bekommen sie kurz Grün und machen den Weg frei.",
-                "If only a few cars wait at a red light in front of an ambulance with blue lights, they briefly get green and clear the way.");
+            Opt(nameof(Setting.PushBlockers), "Einsatzfahrzeug drängt Vordermann", "Emergency vehicles push vehicles ahead",
+                "Fahrzeuge vor einem Einsatzfahrzeug mit Blaulicht werden sofort weitergeschoben (Vanilla macht das erst nach 5 s). Gilt für alle Einsatzfahrzeuge mit Blaulicht: RTW, NEF, Polizei und Feuerwehr.",
+                "Vehicles in front of an emergency vehicle with lights are pushed on immediately (vanilla waits 5 s). Applies to every emergency vehicle with lights: ambulance, emergency doctor, police and fire brigade.");
+            Opt(nameof(Setting.EmergencyLaneChange), "Einsatzfahrzeug wechselt auf freie Spur", "Emergency vehicles switch to a free lane",
+                "Steht ein Einsatzfahrzeug im Stau und ist eine Spur in gleicher Richtung ~40 m frei, überholt es dort und wechselt vor der Kreuzung zurück. Gilt für alle Einsatzfahrzeuge mit Blaulicht: RTW, NEF, Polizei und Feuerwehr.",
+                "If an emergency vehicle is stuck in traffic and a lane in the same direction is clear for ~40 m, it overtakes there and changes back before the intersection. Applies to every emergency vehicle with lights: ambulance, emergency doctor, police and fire brigade.");
+            Opt(nameof(Setting.ClearRedLight), "Wartende vor Einsatzfahrzeugen dürfen bei Rot fahren", "Cars ahead of emergency vehicles may run red lights",
+                "Stehen vor einem Einsatzfahrzeug mit Blaulicht nur wenige Autos an einer roten Ampel, bekommen sie kurz Grün und machen den Weg frei. Gilt für alle Einsatzfahrzeuge mit Blaulicht: RTW, NEF, Polizei und Feuerwehr.",
+                "If only a few cars wait at a red light in front of an emergency vehicle with lights, they briefly get green and clear the way. Applies to every emergency vehicle with lights: ambulance, emergency doctor, police and fire brigade.");
             Opt(nameof(Setting.ClearRedLightMaxCars), "Maximal wartende Autos", "Max. waiting cars",
-                "Nur wenn höchstens so viele Autos vor dem RTW stehen, wird die Ampel umgeschaltet.",
-                "The light is only switched if at most this many cars are in front of the ambulance.");
+                "Nur wenn höchstens so viele Autos vor dem Einsatzfahrzeug stehen, wird die Ampel umgeschaltet.",
+                "The light is only switched if at most this many cars are in front of the emergency vehicle.");
             Opt(nameof(Setting.EmergencyCorridor), "Rettungsgasse", "Emergency corridor",
-                "Steht der RTW ohne freie Nachbarspur fest, halten alle Autos rund um ihn an. Die vor ihm weichen an den rechten Rand ihrer Spur aus, der RTW fährt über die Mittellinie an ihnen vorbei. Erst wenn er vorbei ist, fahren sie weiter. Wird die Ampel grün, löst sich die Gasse auf und die Kolonne fährt normal.",
-                "If the ambulance is stuck with no free neighbouring lane, all cars around it stop. Those ahead move to the right edge of their lane and the ambulance passes them over the centre line. They only drive on once it has passed. When the light turns green, the corridor dissolves and the queue moves normally.");
-            Opt(nameof(Setting.MovingCorridor), "Rettungsgasse im fließenden Verkehr", "Emergency corridor in moving traffic",
-                "Auch im fließenden Verkehr halten die Autos vor einem Einsatzfahrzeug an und fahren an den rechten Spurrand, das Einsatzfahrzeug überholt über die Mittellinie. Lkw, Busse und Wohnmobile weichen nicht aus.",
-                "Also in moving traffic, cars ahead of an emergency vehicle stop and pull to the right edge of their lane, and the emergency vehicle overtakes over the centre line. Trucks, buses and campers do not move aside.");
+                "Autobahn (1 bis 4 Spuren): Sobald der Verkehr stockt, bilden die Autos die Rettungsgasse, auch ohne Einsatzfahrzeug. Alle anderen Straßen: sobald der Verkehr stockt und ein Einsatzfahrzeug auf der Route kommt, nach denselben Regeln. Bei einer Spur je Richtung fahren beide Richtungen an ihren rechten Rand, das Einsatzfahrzeug fährt auf der Mittellinie, und der Gegenverkehr hält, während es vorbeifährt. Für die Feuerwehr fahren auf diesen Straßen alle Spuren beider Richtungen an den rechten Rand, und sie fährt über die Mittellinie. Jede Spur rückt als Ganzes zur Seite, Lkw und Anhänger inklusive, damit die Reihen gerade bleiben: die linke Spur nach links, alle anderen nach rechts, auf der Autobahn bis auf den Pannenstreifen. Bei nur einer Spur fahren alle nach rechts. Die Autos lenken noch im Rollen hinüber, stehende gleiten sanft. Die Gasse ist breit genug für die Feuerwehr. Vor Ausfahrten und an Auffahrten bleibt der Pannenstreifen frei und niemand hält an, damit die Rampen frei bleiben. Das Einsatzfahrzeug fährt mit etwa 50 km/h durch die Gasse (etwa 30 km/h, solange sie sich noch bildet) ohne die Spur zu wechseln, bis zum Ende der Gasse, und biegt von dort in jede Richtung ab, während der übrige Verkehr der Kreuzung wartet. Mehrere Einsatzfahrzeuge hintereinander fahren gemeinsam durch: Die Autos warten, bis das letzte vorbei ist. Kreisverkehre bleiben Vanilla. Danach lenken die Autos sanft zurück und fahren weiter. Sehr schmale Straßen (Spuren unter 2,7 m): Die Autos davor fahren an den rechten Rand und halten, der Gegenverkehr ebenso, und es überholt über die Mittellinie. Ist die Straße dafür zu eng, biegt die Kolonne an der nächsten Kreuzung anders ab. Im Linksverkehr gespiegelt. Gilt für alle Einsatzfahrzeuge mit Blaulicht: RTW, NEF, Polizei und Feuerwehr.",
+                "Highways (1 to 4 lanes): as soon as traffic slows down, cars form the corridor, even with no emergency vehicle around. All other roads: as soon as traffic slows and an emergency vehicle is coming along the route, by the same rules. With one lane each way both directions pull to their right edge, the emergency vehicle drives on the centre line, and oncoming traffic stops while it passes. For fire engines on these roads all lanes of both directions pull to the right edge and the fire engine drives over the centre line. Every lane moves aside as a whole, trucks and trailers included, so the rows stay straight: the left lane moves left, all others move right, on highways onto the shoulders. With a single lane everyone moves right. Cars steer over while still rolling, standing ones glide smoothly. The corridor is wide enough for fire engines. Near exits and entries the shoulder stays clear and nobody stops, so the ramps stay free. The emergency vehicle drives through at about 50 km/h (about 30 km/h while the corridor is still forming) without changing lanes, to the end of the corridor, and turns from there in any direction while the other junction traffic waits. Several emergency vehicles in a row pass together: cars wait until the last one has passed. Roundabouts stay vanilla. Afterwards cars steer back smoothly and drive on. Very narrow roads (lanes under 2.7 m): cars ahead pull to the right edge and stop, oncoming traffic too, and it passes over the centre line. If the road is too narrow, the queue turns off at the next junction instead. Mirrored in left-hand traffic. Applies to every emergency vehicle with lights: ambulance, emergency doctor, police and fire brigade.");
             Opt(nameof(Setting.OncomingOvertake), "Auf der Gegenfahrbahn überholen", "Overtake on the oncoming lane",
-                "Auf Straßen mit einer Spur pro Richtung weichen Lkw, Busse und Wohnmobile nicht aus. Steht so ein Fahrzeug in der Kolonne, wird die Gegenfahrbahn gesperrt: Autos, die in sie einfahren wollen, warten an der Kreuzung (ohne Umleitung). Ist sie leer, überholt der RTW die ganze Kolonne darauf. Danach fahren alle weiter. Fährt langsamer Verkehr vor dem RTW und ist die Gegenfahrbahn frei, überholt er ebenso. Feuerwehrautos mit Blaulicht überholen genauso (nur das, keine anderen Fahrhilfen).",
-                "On roads with one lane per direction, trucks, buses and campers do not move aside. If such a vehicle is in the queue, the oncoming lane is closed: cars about to enter it wait at the junction (no rerouting). Once it is empty, the ambulance overtakes the whole queue on it. Afterwards everyone drives on. Slower traffic moving ahead is overtaken the same way when the oncoming lane is free. Fire engines with lights overtake the same way (only this, no other driving aids).");
-            Opt(nameof(Setting.PoliceEmergencyDriving), "Auch für Polizei mit Blaulicht", "Also for police with blue lights",
-                "Polizeiautos im Einsatz nutzen dieselben Hilfen wie der RTW: Vordermann drängen, Spurwechsel, Abbiegen von jeder Spur, Ampel freischalten und Rettungsgasse.",
-                "Police cars on a call use the same aids as the ambulance: pushing vehicles ahead, lane change, turning from any lane, clearing red lights and emergency corridor.");
+                "Auf Straßen mit einer Spur pro Richtung weichen Lkw, Busse und Wohnmobile nicht aus. Steht so ein Fahrzeug in der Kolonne, wird die Gegenfahrbahn gesperrt: Autos, die in sie einfahren wollen, warten an der Kreuzung (ohne Umleitung). Ist sie leer, überholt das Einsatzfahrzeug die ganze Kolonne darauf. Danach fahren alle weiter. Fährt langsamer Verkehr davor und ist die Gegenfahrbahn frei, überholt es ebenso. Gilt für alle Einsatzfahrzeuge mit Blaulicht: RTW, NEF, Polizei und Feuerwehr.",
+                "On roads with one lane per direction, trucks, buses and campers do not move aside. If such a vehicle is in the queue, the oncoming lane is closed: cars about to enter it wait at the junction (no rerouting). Once it is empty, the emergency vehicle overtakes the whole queue on it. Afterwards everyone drives on. Slower traffic moving ahead is overtaken the same way when the oncoming lane is free. Applies to every emergency vehicle with lights: ambulance, emergency doctor, police and fire brigade.");
+            Opt(nameof(Setting.SirenOnlyWhenNeeded), "Sirene nur bei Bedarf", "Siren only when needed",
+                "Einsatzfahrzeuge fahren mit Blaulicht, aber ohne Sirene. Die Sirene ertönt nur, wenn sie gebraucht wird: im Stau oder in der Rettungsgasse, beim Überholen auf der Gegenfahrbahn und vor einer roten Ampel. Danach läuft sie noch ~3 s weiter. Das Fahrverhalten ändert sich nicht. Gilt für alle Einsatzfahrzeuge mit Blaulicht: RTW, NEF, Polizei und Feuerwehr.",
+                "Emergency vehicles drive with lights but without the siren. The siren only sounds when it is needed: in a traffic jam or emergency corridor, while overtaking on the oncoming lane, and in front of a red light. It keeps sounding for ~3 s afterwards. Driving behaviour does not change. Applies to every emergency vehicle with lights: ambulance, emergency doctor, police and fire brigade.");
             Opt(nameof(Setting.LogAmbulanceStates), "Debug-Protokoll", "Debug logging",
                 "Schreibt jede Zustandsänderung und Entscheidung nach Logs/RealisticEMS.log. Nur zur Fehlersuche, Warnungen und Fehler werden immer protokolliert.",
                 "Writes every state change and decision to Logs/RealisticEMS.log. For bug reports only; warnings and errors are always logged.");
             Opt(nameof(Setting.ExportLog), "Protokoll exportieren", "Export log",
-                "Kopiert das Protokoll mit Hash und Signatur in einen Ordner unter Logs/, damit nachweisbar ist, dass es nicht verändert wurde.",
-                "Copies the log with a hash and signature into a folder under Logs/, so it can be proven unmodified.");
+                "Kopiert das Protokoll mit SHA-256-Hash in einen Ordner unter Logs/, damit es sich leicht an einen Fehlerbericht anhängen lässt.",
+                "Copies the log with a SHA-256 hash into a folder under Logs/, ready to attach to a bug report.");
             Opt(nameof(Setting.DebugPassword), "Debug-Passwort", "Debug password",
                 "Schaltet die Debug-Seite in der Leitstelle frei.", "Unlocks the Debug page in the dispatch window.");
             Opt(nameof(Setting.DepotAmbulances), "RTW pro Wache", "Ambulances per depot",
