@@ -11,7 +11,7 @@ const building=m=>{
 };
 
 // The street ends at the building (y 140), so the top of the panel is ground, not road.
-const dispatchScene=m=>`<svg viewBox="0 0 300 500" preserveAspectRatio="xMidYMid slice"><rect width="300" height="500" fill="#2a3a30"/><rect y="140" width="300" height="360" fill="#808080"/><rect x="45" y="140" width="210" height="360" fill="#262626"/><path d="M150 140V500" stroke="#e8e8e8" stroke-width="3" stroke-dasharray="16 14"/><path class="geo" d="${DROUTE}" fill="none"/>${DEFS}<g class="fade">${AMB}${building(m)}</g></svg>`;
+const dispatchScene=(m,veh=AMB,bld=building(m))=>`<svg viewBox="0 0 300 500" preserveAspectRatio="xMidYMid slice"><rect width="300" height="500" fill="#2a3a30"/><rect y="140" width="300" height="360" fill="#808080"/><rect x="45" y="140" width="210" height="360" fill="#262626"/><path d="M150 140V500" stroke="#e8e8e8" stroke-width="3" stroke-dasharray="16 14"/><path class="geo" d="${DROUTE}" fill="none"/>${DEFS}<g class="fade">${veh}${bld}</g></svg>`;
 
 const dstage=()=>[0,1].map(m=>`<div class="panel" role="button" tabindex="0" aria-label="${T[lang].bld[m]}">${dispatchScene(m)}</div>`).join("");
 
@@ -21,5 +21,28 @@ function initDispatch(svg){
   return t=>{
     q(".fade").setAttribute("opacity",t<.5?t/.5:t>9.3?(10-t)/.7:1);
     r.draw(ease((t-.8)/5)*(r.L+110),t);
+  };
+}
+
+// Fire station screen (Setting.FireStationAmbulances). Left: only a fire engine leaves (vanilla). Right: the fire station
+// also sends an ambulance (mod). Same street and animation as the dispatch screen.
+const FIRE_TXT={en:["Fire engines only","Also ambulances"],de:["Nur Löschfahrzeuge","Auch Rettungswagen"]};
+const FIRE_BLD={en:"Fire station",de:"Feuerwache"};
+const engine=()=>AMB.replace('fill="#e87333"','fill="#d32f2f"').replace('class="cross" fill="#fff"','class="cross" fill="none"');
+const fireHouse=()=>`<path d="${sq(200,130,30)}" transform="translate(150 75)" fill="#ecd3ce"/>`
+  +`<path d="${sq(64,34,10)}" transform="translate(100 123)" fill="#14202e"/>`
+  +`<path d="M62 30H238" stroke="#d32f2f" stroke-width="6" stroke-linecap="round"/>`
+  +`<text x="150" y="86" text-anchor="middle" font-size="20" font-weight="700" font-family="system-ui,sans-serif" fill="#1b2a44">${FIRE_BLD[lang]}</text>`;
+// Right panel: engine and ambulance leave one behind the other, each in a .v group with its own route copy for rig().
+const convoy=()=>[AMB,engine()].map(v=>`<g class="v"><path class="geo" d="${DROUTE}" fill="none"/>${v}</g>`).join("");
+const fstage=()=>PANELS(2,FIRE_TXT[lang],m=>dispatchScene(m,m?convoy():engine(),fireHouse()));
+function initFire(svg){
+  const vs=[...svg.querySelectorAll(".v")];
+  if(!vs.length) return initDispatch(svg);
+  const rs=vs.map(rig), q=n=>svg.querySelector(n), GAP=140, ease=p=>{p=clamp(p);return p*p*(3-2*p)}; // vehicle 100 + 40 gap; group 0 = ambulance (behind)
+  return t=>{
+    q(".fade").setAttribute("opacity",t<.5?t/.5:t>9.3?(10-t)/.7:1);
+    const s=ease((t-.8)/5.5)*(rs[0].L+110+GAP);
+    rs.forEach((r,i)=>r.draw(Math.max(0,s-(rs.length-1-i)*GAP),t));
   };
 }

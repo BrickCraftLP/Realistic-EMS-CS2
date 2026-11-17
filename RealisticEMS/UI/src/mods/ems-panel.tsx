@@ -4,6 +4,7 @@ import { FloatingButton, Panel, Scrollable } from "cs2/ui";
 import { useLocalization } from "cs2/l10n";
 import styles from "./ems-panel.module.scss";
 import { Map3D } from "./map3d";
+import { Map3DPro } from "./map3d-pro";
 
 // Language follows the game: Setting.cs registers RealisticEMS.Lang = "de" for de-DE, "en" otherwise.
 // ponytail: module-level flag set by the two root components each render; children render after them.
@@ -262,7 +263,7 @@ const LageTab = ({ s, win }: { s: State; win: Win }) => {
                 <section className={`${styles.card} ${styles.rangeCard}`}>
                     <div className={styles.cardHead}><h2>{t("Kennzahlen im Soll", "Key figures")}</h2><span className={styles.figure}>{t("gestrichelt = Zielbereich", "dashed = target range")}</span></div>
                     <RangeRow label={t("Ø Eintreffzeit", "Avg. response")} value={avgResp !== null ? `${avgResp} min` : "–"} pos={avgResp !== null ? (avgResp / 30) * 100 : null}
-                        lo={0} hi={(HILFSFRIST / 30) * 100} state={avgResp === null || avgResp <= HILFSFRIST ? "ok" : "warn"} />
+                        lo={0} hi={(HILFSFRIST / 30) * 100} state={avgResp === null || avgResp < 13 ? "ok" : avgResp <= HILFSFRIST ? "warn" : "bad"} />
                     <RangeRow label={t("Freie RTW", "Free ambulances")} value={`${o.free} / ${o.total} · ${freePct}%`} pos={o.total ? freePct : null} lo={40} hi={100} state={!o.total || freePct >= 40 ? "ok" : freePct >= 20 ? "warn" : "bad"} />
                     <RangeRow label={t("Bettenbelegung", "Bed occupancy")} value={`${bedPct}% · ${o.bedsUsed} / ${o.bedsTotal}`} pos={o.bedsTotal ? bedPct : null} lo={0} hi={80} state={bedPct < 80 ? "ok" : bedPct < 100 ? "warn" : "bad"} />
                     <RangeRow label={t("Spitäler nehmen auf", "Hospitals admitting")} value={`${admitting} / ${o.hospitals}`} pos={o.hospitals ? pct(admitting, o.hospitals) : null}
@@ -484,6 +485,8 @@ const KarteTab = ({ s, compact }: { s: State; compact?: boolean }) => {
     // View = zoom k and pan x/y in canvas units, applied on top of the fit-to-city projection.
     const [view, setView] = useState(HOME);
     const [mode3d, setMode3d] = useState(false);
+    const [beta, setBeta] = useState(false);
+    const betaOn = useValue(settings$).some(x => x.name === "EnableMap3dPro" && x.bool);
     const drag = useRef<readonly [number, number] | null>(null);
     const fit = useMemo(() => projection(roads), [roads]);
     const project = (x: number, z: number) => { const [px, py] = fit(x, z); return [px * view.k + view.x, py * view.k + view.y] as const; };
@@ -534,12 +537,13 @@ const KarteTab = ({ s, compact }: { s: State; compact?: boolean }) => {
                             <button className={styles.chip} onClick={() => zoomAt(MAP_W / 2, MAP_H / 2, 1.25)}>+</button>
                             <button className={view.k === 1 ? styles.chipOn : styles.chip} onClick={() => setView(HOME)}>{t("Ganze Stadt", "Whole city")}</button>
                         </>}
-                        <button className={mode3d ? styles.chip : styles.chipOn} onClick={() => setMode3d(false)}>2D</button>
-                        <button className={mode3d ? styles.chipOn : styles.chip} onClick={() => setMode3d(true)}>3D</button>
+                        <button className={mode3d || beta ? styles.chip : styles.chipOn} onClick={() => { setMode3d(false); setBeta(false); }}>2D</button>
+                        <button className={mode3d && !beta ? styles.chipOn : styles.chip} onClick={() => { setMode3d(true); setBeta(false); }}>3D</button>
+                        {betaOn && <button className={beta ? styles.chipOn : styles.chip} onClick={() => { setMode3d(true); setBeta(true); }}>3D Beta</button>}
                     </span>
                 </div>
             )}
-            {mode3d && !compact ? <Map3D de={DE} embedded /> : <div className={compact ? `${styles.map} ${styles.mapCompact}` : styles.map}
+            {mode3d && !compact ? (beta ? <Map3DPro de={DE} /> : <Map3D de={DE} embedded />) : <div className={compact ? `${styles.map} ${styles.mapCompact}` : styles.map}
                 onWheel={e => { e.stopPropagation(); const [mx, my] = toMap(e); zoomAt(mx, my, e.deltaY < 0 ? 1.25 : 0.8); }}
                 onMouseDown={e => { drag.current = toMap(e); }}
                 onMouseMove={onMove}

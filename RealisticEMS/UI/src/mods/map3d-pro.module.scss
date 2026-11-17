@@ -1,0 +1,46 @@
+// Material 3 loading indicator (Expressive): a morphing, rotating shape in a tonal container. Tokens match map3d.module.scss.
+$primary: #415F91;
+$primary-container: #D6E3FF;
+$on-surface: #191C20;
+$on-surface-variant: #44474E;
+$surface-container-high: rgba(231, 232, 238, 0.94);
+$emphasized: cubic-bezier(0.2, 0, 0, 1);
+
+.loader {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 20rem 28rem; border-radius: 28rem;
+    background: $surface-container-high;
+    box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.15), 0 1rem 2rem rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+}
+
+.indicator {
+    width: 48rem; height: 48rem; border-radius: 24rem;
+    background: $primary-container;
+    display: flex; align-items: center; justify-content: center;
+    animation: m3-spin 1.3s linear infinite; // round container, so only the shape inside visibly turns
+}
+
+.shape {
+    width: 38rem; height: 38rem;
+    background: $primary;
+    animation: m3-morph 2.6s $emphasized infinite;
+}
+
+.label { margin-top: 12rem; font-size: 14rem; font-weight: 500; color: $on-surface; }
+.sub { margin-top: 4rem; font-size: 12rem; color: $on-surface-variant; max-width: 320rem; text-align: center; }
+
+// Shape sequence approximating M3's soft-burst -> cookie -> pill -> oval -> sunny loop with border-radius only (no clip-path in the game UI).
+@keyframes m3-morph {
+    0%   { border-radius: 42% 58% 46% 54% / 50% 44% 56% 50%; transform: scale(0.9); }
+    20%  { border-radius: 30% 30% 30% 30%; transform: scale(0.78); }
+    40%  { border-radius: 50% 50% 50% 50% / 28% 28% 72% 72%; transform: scale(0.86); }
+    60%  { border-radius: 50%; transform: scale(0.72); }
+    80%  { border-radius: 24% 50% 24% 50%; transform: scale(0.84); }
+    100% { border-radius: 42% 58% 46% 54% / 50% 44% 56% 50%; transform: scale(0.9); }
+}
+@keyframes m3-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.paused .indicator { animation-duration: 4s; }
+.paused .shape { animation-duration: 5.2s; opacity: 0.6; } // reduced motion while waiting on the framerate gate

@@ -36,6 +36,7 @@ namespace RealisticEMS
     {
         private EntityQuery m_Ambulances, m_Hospitals;
         private UnitNamingSystem m_Units;
+        private HelicopterSystem m_Heli;
         private Random m_Random = new Random(0x5EF1);
 
         private class Mission { public Entity Patient, Location, Hospital; public bool Escorting; public int Frames; }
@@ -55,6 +56,7 @@ namespace RealisticEMS
         {
             base.OnCreate();
             m_Units = World.GetOrCreateSystemManaged<UnitNamingSystem>();
+            m_Heli = World.GetOrCreateSystemManaged<HelicopterSystem>();
             m_Ambulances = GetEntityQuery(ComponentType.ReadOnly<Ambulance>(), ComponentType.ReadOnly<Owner>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
             m_Hospitals = GetEntityQuery(ComponentType.ReadOnly<Hospital>(), ComponentType.ReadOnly<Patient>(), ComponentType.ReadOnly<Transform>(),
                 ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
@@ -80,9 +82,15 @@ namespace RealisticEMS
                 var a = em.GetComponentData<Ambulance>(v);
                 if (a.m_TargetPatient == Entity.Null) continue;
                 rtwByPatient[a.m_TargetPatient] = v;
-                if (m_Handled.Contains(a.m_TargetPatient) || !m_Units.TryGetCode(v, out var code) || code == null) continue;
+                if (m_Handled.Contains(a.m_TargetPatient) || HelicopterSystem.HeliPatients.Contains(a.m_TargetPatient)
+                    || !m_Units.TryGetCode(v, out var code) || code == null) continue;
 
-                if (code.Nef > 0) Request(a.m_TargetPatient, a.m_TargetLocation, $"Code {code} verlangt NEF");
+                if (code.Nef > 0)
+                {
+                    // The rescue helicopter goes instead when it is faster (HelicopterSystem decides).
+                    if (m_Heli.TryDispatchDoctor(a.m_TargetPatient, a.m_TargetLocation, $"Code {code} verlangt Notarzt, RTH schneller")) m_Handled.Add(a.m_TargetPatient);
+                    else Request(a.m_TargetPatient, a.m_TargetLocation, $"Code {code} verlangt NEF");
+                }
                 else if (OnSceneCareSystem.OnScene(em, v)) // not AtTarget: the on-scene hold clears it
                 {
                     m_Handled.Add(a.m_TargetPatient); // one roll per patient
@@ -108,7 +116,7 @@ namespace RealisticEMS
         public static readonly Dictionary<Entity, Entity> NefByPatient = new Dictionary<Entity, Entity>();
 
         // ponytail: fixed chances; move to settings if players want to tune them.
-        private static float CallInChance(AmpdsLevel l) => l == AmpdsLevel.Echo ? 1f : l == AmpdsLevel.Delta ? 0.3f : l == AmpdsLevel.Charlie ? 0.1f : 0.02f;
+        public static float CallInChance(AmpdsLevel l) => l == AmpdsLevel.Echo ? 1f : l == AmpdsLevel.Delta ? 0.3f : l == AmpdsLevel.Charlie ? 0.1f : 0.02f;
         private static float EscortChance(AmpdsLevel l) => l == AmpdsLevel.Echo ? 0.8f : l == AmpdsLevel.Delta ? 0.5f : l == AmpdsLevel.Charlie ? 0.15f : 0f;
 
         private void Request(Entity patient, Entity location, string why)
@@ -150,7 +158,7 @@ namespace RealisticEMS
                 if (m_NoStart.Contains(h) || !em.HasComponent<HospitalData>(prefab)) continue;
                 var data = em.GetComponentData<HospitalData>(prefab);
                 if (data.m_PatientCapacity <= 0 || data.m_AmbulanceCapacity <= 0) continue; // only hospitals that send vehicles out
-                if ((busy.TryGetValue(h, out var used) ? used : 0) >= Mod.Setting.NefPerHospital) continue;
+                if ((busy.TryGetValue(h, out var used) ? used : 0) >= StationFleetSystem.NefLimit(em, h)) continue;
                 // ponytail: straight-line distance; the route itself is vanilla pathfinding.
                 float d = math.distance(at, em.GetComponentData<Transform>(h).m_Position);
                 if (d < bestDist) { bestDist = d; best = h; }
@@ -257,6 +265,7 @@ namespace RealisticEMS
             var hospital = em.GetComponentData<Target>(rtw).m_Target;
             if (hospital == Entity.Null) return;
             m.Escorting = true; // decided once
+            if (m_Heli.IsHandingOver(rtw)) { Mod.log.Info($"NEF {nef.Index}: Patient fliegt mit RTH, frei"); return; }
             bool critical = (a.m_State & AmbulanceFlags.Critical) != 0;
             var level = m_Units.TryGetCode(rtw, out var code) && code != null ? code.Level : AmpdsLevel.Alpha;
             if (!critical && m_Random.NextFloat() >= EscortChance(level))

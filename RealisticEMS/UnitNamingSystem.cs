@@ -115,7 +115,7 @@ namespace RealisticEMS
                 if (!m_Callsign.TryGetValue(e, out var callsign))
                 {
                     string station = StationLabel(owners[i].m_Owner, stations);
-                    callsign = m_Callsign[e] = NewCallsign($"{(NefDispatchSystem.IsNef(EntityManager, e) ? Mod.T("NEF", "DOC") : Mod.T("RTW", "AMB"))} {station}-");
+                    callsign = m_Callsign[e] = NewCallsign($"{(NefDispatchSystem.IsNef(EntityManager, e) ? Mod.T("NEF", "DOC") : EntityManager.HasComponent<Game.Vehicles.Helicopter>(e) ? Mod.T("RTH", "HEMS") : Mod.T("RTW", "AMB"))} {station}-");
                 }
 
                 bool onCall = a.m_TargetPatient != Entity.Null && (a.m_State & (AmbulanceFlags.Dispatched | AmbulanceFlags.Transporting)) != 0;

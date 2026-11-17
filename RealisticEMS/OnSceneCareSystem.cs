@@ -20,6 +20,9 @@ namespace RealisticEMS
     public partial class OnSceneCareSystem : GameSystemBase
     {
         public const float FramesPerGameMinute = TimeSystem.kTicksPerDay / 1440f;
+        // Drives run at real speed (60 frames = 1 sim second) while the clock is compressed (1 game minute ~ 3 s), so travel is timed in sim minutes.
+        // ponytail: fixed 60 fps sim rate; raise/lower to calibrate how long responses read.
+        public const float DriveFramesPerMinute = 3600f;
 
         private class Care { public uint Dispatch, Arrive, NefArrive, Start, Transport; }
         private readonly Dictionary<Entity, Care> m_Care = new Dictionary<Entity, Care>(); // patient -> on-scene times
@@ -36,6 +39,9 @@ namespace RealisticEMS
         }
 
         public override int GetUpdateInterval(SystemUpdatePhase phase) => 16;
+
+        /// <summary>An ambulance is on its way to or caring for this patient (not yet transporting).</summary>
+        public bool Awaited(Entity patient) => m_Care.TryGetValue(patient, out var c) && c.Transport == 0;
 
         /// <summary>Arrived at the call location, the same test AmbulanceAISystem uses (end of path OR curb parking spot).</summary>
         public static bool OnScene(EntityManager em, Entity vehicle)
@@ -125,7 +131,7 @@ namespace RealisticEMS
             var em = EntityManager;
             uint now = m_Sim.frameIndex;
             uint care = (uint)(Mod.Setting.OnSceneMinutes * FramesPerGameMinute);
-            uint maxWait = Mod.Setting.EnableNef ? (uint)(Mod.Setting.NefMaxWaitMinutes * FramesPerGameMinute) : 0;
+            uint maxWait = Mod.Setting.EnableNef || Mod.Setting.EnableHelicopter ? (uint)(Mod.Setting.NefMaxWaitMinutes * FramesPerGameMinute) : 0;
             uint cap = care + maxWait + (uint)(10 * FramesPerGameMinute);
             var held = new HashSet<Entity>();
             var quiet = new HashSet<Entity>(); // on scene during care: lights on, siren off
@@ -145,7 +151,8 @@ namespace RealisticEMS
                 }
                 if (p == Entity.Null || (a.m_State & AmbulanceFlags.Dispatched) == 0
                     || (a.m_State & (AmbulanceFlags.Transporting | AmbulanceFlags.Returning)) != 0) continue;
-                bool nefInvolved = NefDispatchSystem.NefByPatient.TryGetValue(p, out var nef);
+                // Doctor by road (NEF) or by helicopter (police car shuttling the doctor from the landing site).
+                bool nefInvolved = NefDispatchSystem.NefByPatient.TryGetValue(p, out var nef) || HelicopterSystem.DoctorByPatient.TryGetValue(p, out nef);
                 seen.Add(p);
                 if (!m_Care.TryGetValue(p, out var c)) m_Care[p] = c = new Care { Dispatch = now };
                 if (nefInvolved && c.NefArrive == 0 && nef != Entity.Null && em.Exists(nef) && OnScene(em, nef)) c.NefArrive = now;
@@ -165,7 +172,7 @@ namespace RealisticEMS
                 if (c.Start == 0 && nefInvolved)
                 {
                     bool nefOnScene = nef != Entity.Null && em.Exists(nef) && OnScene(em, nef)
-                        && (em.GetComponentData<Ambulance>(nef).m_State & (AmbulanceFlags.Transporting | AmbulanceFlags.Returning)) == 0;
+                        && (!em.HasComponent<Ambulance>(nef) || (em.GetComponentData<Ambulance>(nef).m_State & (AmbulanceFlags.Transporting | AmbulanceFlags.Returning)) == 0);
                     if (nefOnScene) { c.Start = now; Mod.log.Info($"{unit} behandelt gemeinsam mit NEF ({Mod.Setting.OnSceneMinutes} min)"); }
                     else if (now - c.Arrive >= maxWait) { c.Start = now; Mod.log.Info($"{unit}: NEF nicht rechtzeitig da, versorgt allein"); }
                 }
@@ -186,6 +193,54 @@ namespace RealisticEMS
             CrewHoldSystem.Held.UnionWith(held);
             SilenceSirens(quiet);
             foreach (var p in new List<Entity>(m_Care.Keys)) if (!seen.Contains(p)) m_Care.Remove(p);
+        }
+
+        public IEnumerable<Entity> Patients => m_Care.Keys;
+    }
+
+    /// <summary>
+    /// Vanilla DeathCheckSystem rolls a recovery for every sick/injured citizen several times a game day and clears
+    /// Sick/Injured/RequireTransport on success; HealthProblemSystem then drops the HealthProblem and the ambulance
+    /// (LoadPatients) drives home empty. Vanilla patients board within seconds, so it rarely shows there; with the
+    /// drive and the on-scene care hold most patients "recovered" before boarding (seen in logs: 51 of 54 lost calls).
+    /// Runs right after DeathCheckSystem and gives a patient with an ambulance assigned the flags back. Death still happens.
+    /// </summary>
+    public partial class PatientKeepSystem : GameSystemBase
+    {
+        private const Game.Citizens.HealthProblemFlags Need = Game.Citizens.HealthProblemFlags.Sick | Game.Citizens.HealthProblemFlags.Injured | Game.Citizens.HealthProblemFlags.RequireTransport;
+        private Dictionary<Entity, Game.Citizens.HealthProblemFlags> m_Flags = new Dictionary<Entity, Game.Citizens.HealthProblemFlags>();
+        private OnSceneCareSystem m_Care;
+
+        protected override void OnCreate()
+        {
+            base.OnCreate();
+            m_Care = World.GetOrCreateSystemManaged<OnSceneCareSystem>();
+        }
+
+        protected override void OnGamePreload(Colossal.Serialization.Entities.Purpose purpose, GameMode mode)
+        {
+            base.OnGamePreload(purpose, mode);
+            m_Flags.Clear();
+        }
+
+        protected override void OnUpdate()
+        {
+            var em = EntityManager;
+            var now = new Dictionary<Entity, Game.Citizens.HealthProblemFlags>();
+            foreach (var p in m_Care.Patients)
+            {
+                if (!m_Care.Awaited(p) || !em.HasComponent<Game.Citizens.HealthProblem>(p)) continue;
+                var hp = em.GetComponentData<Game.Citizens.HealthProblem>(p);
+                if ((hp.m_Flags & Game.Citizens.HealthProblemFlags.Dead) != 0) continue;
+                if ((hp.m_Flags & Need) == 0 && m_Flags.TryGetValue(p, out var was))
+                {
+                    hp.m_Flags |= was & Need;
+                    em.SetComponentData(p, hp);
+                    Mod.log.Info($"Patient {p.Index}: Genesung verhindert, Rettungsdienst ist unterwegs/vor Ort");
+                }
+                if ((hp.m_Flags & Game.Citizens.HealthProblemFlags.RequireTransport) != 0) now[p] = hp.m_Flags;
+            }
+            m_Flags = now;
         }
     }
 }

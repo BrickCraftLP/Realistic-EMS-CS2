@@ -130,7 +130,7 @@ namespace RealisticEMS
         /// Debug tab: makes random citizens inside a building sick or injured, the same event vanilla's health system raises.
         /// kind: "sick", "injured", "critical", "door" (locked door), a code like "09E01" or a protocol like "25" (random code of it).
         /// </summary>
-        private static bool DebugUnlocked => Mod.Setting.DebugPassword == Setting.DebugPasswordValue;
+        internal static bool DebugUnlocked => Mod.Setting.DebugPassword == Setting.DebugPasswordValue;
 
         private void DebugCall(string kind, int count)
         {
@@ -400,6 +400,7 @@ namespace RealisticEMS
                 // Call id = patient entity index; a NEF is linked through NefDispatchSystem. 0 = no call.
                 var patient = r.a.m_TargetPatient;
                 if (patient == Entity.Null && nef) patient = NefDispatchSystem.NefByPatient.FirstOrDefault(kv => kv.Value == r.e).Key;
+                if (patient == Entity.Null) patient = HelicopterSystem.PatientOf(r.e); // rescue heli flying in (no m_TargetPatient yet)
                 Prop(w, "call", patient.Index);
                 var info = CallInfo(patient); Prop(w, "callNo", info.no); Prop(w, "address", info.addr);
                 Prop(w, "nef", nef); Prop(w, "id", r.e.Index); Prop(w, "ver", r.e.Version); Pos(w, r.e);
@@ -528,7 +529,7 @@ namespace RealisticEMS
                 }
                 if (d.since != 0 && OnSceneCareSystem.OnScene(em, e))
                 {
-                    m_Response.Add((int)math.round((now - d.since) / OnSceneCareSystem.FramesPerGameMinute));
+                    m_Response.Add((int)math.round((now - d.since) / OnSceneCareSystem.DriveFramesPerMinute));
                     if (m_Response.Count > ResponseLength) m_Response.RemoveAt(0);
                     d.since = 0;
                 }
@@ -537,6 +538,7 @@ namespace RealisticEMS
             foreach (var gone in m_Dispatch.Keys.Where(e => !seen.Contains(e)).ToList()) m_Dispatch.Remove(gone);
             var live = new HashSet<Entity>(m_Dispatch.Values.Select(d => d.patient)); // finished calls drop their number
             foreach (var p in NefDispatchSystem.NefByPatient.Keys) live.Add(p);
+            foreach (var p in HelicopterSystem.HeliByPatient.Keys) live.Add(p);
             foreach (var gone in m_CallInfo.Keys.Where(p => !live.Contains(p)).ToList()) m_CallInfo.Remove(gone);
         }
 

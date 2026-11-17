@@ -35,6 +35,7 @@ namespace RealisticEMS
                 else Mod.log.Warn("VehiclesSection not found, building panel shows vanilla vehicle states");
                 CallInfoSection.Install(world, sections);
                 StationCallsignSection.Install(world, sections);
+                BedDisplaySection.Install(world);
             }
             catch (Exception ex) { Mod.log.Error(ex, "VehicleStateSection.Install failed"); }
         }

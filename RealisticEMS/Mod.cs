@@ -29,8 +29,12 @@ namespace RealisticEMS
 
             // Both run after the vanilla systems whose output they correct, every simulation frame.
             updateSystem.UpdateAfter<HospitalSelectionSystem, HospitalAISystem>(SystemUpdatePhase.GameSimulation);
+            // Patients inside a hidden (full) hospital must still see it as able to treat them.
+            updateSystem.UpdateBefore<HospitalRevealSystem, HealthProblemSystem>(SystemUpdatePhase.GameSimulation);
+            updateSystem.UpdateAfter<HospitalRehideSystem, HealthProblemSystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateAfter<AmbulanceReturnSystem, AmbulanceAISystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateAfter<DepotOnlyDispatchSystem, HospitalAISystem>(SystemUpdatePhase.GameSimulation);
+            updateSystem.UpdateAfter<StationFleetSystem, HospitalAISystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateAfter<UnitNamingSystem, AmbulanceAISystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateBefore<AmbulanceStuckGuardSystem, AmbulanceAISystem>(SystemUpdatePhase.GameSimulation); // before it deletes stuck ambulances
             updateSystem.UpdateAfter<EmergencyLaneSystem, CarNavigationSystem.Actions>(SystemUpdatePhase.GameSimulation); // after lane object updates
@@ -42,16 +46,20 @@ namespace RealisticEMS
             updateSystem.UpdateBefore<NefPrefabSystem, Game.Prefabs.PrefabInitializeSystem>(SystemUpdatePhase.PrefabUpdate);
             updateSystem.UpdateAfter<NefDispatchSystem, AmbulanceAISystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateAfter<OnSceneCareSystem, NefDispatchSystem>(SystemUpdatePhase.GameSimulation);
+            updateSystem.UpdateBefore<HelicopterSystem, AmbulanceAISystem>(SystemUpdatePhase.GameSimulation); // holds handover ambulances before vanilla unloads at the field
             updateSystem.UpdateAfter<ResponderDispatchSystem, PoliceCarAISystem>(SystemUpdatePhase.GameSimulation); // re-sets lights after vanilla ResetPath
             updateSystem.UpdateAfter<CrewHoldSystem, OnSceneCareSystem>(SystemUpdatePhase.GameSimulation);
+            updateSystem.UpdateAfter<PatientKeepSystem, DeathCheckSystem>(SystemUpdatePhase.GameSimulation); // undo vanilla recovery the same frame
             updateSystem.UpdateAfter<SidewalkParkingSystem, OnSceneCareSystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateBefore<CrewHoldLateSystem, ResidentAISystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateAt<BedCapacitySystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateBefore<CallVolumeSystem, Game.Events.AddHealthProblemSystem>(SystemUpdatePhase.GameSimulation); // sees new health events before they are applied
             updateSystem.UpdateAt<DispatchUISystem>(SystemUpdatePhase.UIUpdate);
+            updateSystem.UpdateAt<Map3dProSystem>(SystemUpdatePhase.UIUpdate);
             Ampds.Load();
             Ampds.SelfCheck();
             EmergencyLaneSystem.SelfCheck();
+            HelicopterSystem.SelfCheck();
             // Must add the prefab before PrefabInitializeSystem runs that frame, else it is never LateInitialized (no toolbar group).
             updateSystem.UpdateBefore<DepotPrefabSystem, Game.Prefabs.PrefabInitializeSystem>(SystemUpdatePhase.PrefabUpdate);
             log.Info("Loaded");

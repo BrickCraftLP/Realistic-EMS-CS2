@@ -14,6 +14,7 @@ const register: ModRegistrar = (moduleRegistry) => {
     moduleRegistry.extend("game-ui/game/components/selected-info-panel/selected-info-sections/selected-info-sections.tsx",
         "selectedInfoSectionComponents", (components: any) => {
             components["RealisticEMS.VehicleStateSection"] = components["Game.UI.InGame.VehiclesSection"];
+            components["RealisticEMS.BedDisplaySection"] = components["Game.UI.InGame.HealthcareSection"];
             components["RealisticEMS.CallInfoSection"] = CallSection;
             components["RealisticEMS.StationCallsignSection"] = StationSection;
             return components;

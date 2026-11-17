@@ -59,8 +59,13 @@ namespace RealisticEMS
         {
             var em = EntityManager;
             if (em.TryGetComponent<Ambulance>(e, out var a))
-                return a.m_TargetPatient != Entity.Null ? a.m_TargetPatient : NefDispatchSystem.NefByPatient.FirstOrDefault(kv => kv.Value == e).Key;
+            {
+                if (a.m_TargetPatient != Entity.Null) return a.m_TargetPatient;
+                var viaNef = NefDispatchSystem.NefByPatient.FirstOrDefault(kv => kv.Value == e).Key;
+                return viaNef != Entity.Null ? viaNef : HelicopterSystem.PatientOf(e);
+            }
             var p = m_Responders.PatientOf(e);
+            if (p == Entity.Null) p = HelicopterSystem.PatientOf(e); // doctor shuttle police car
             if (p != Entity.Null || !em.TryGetComponent<Target>(e, out var t) || t.m_Target == Entity.Null) return p;
             // After a load ResponderDispatchSystem forgets its cars: match by call location instead.
             using var amb = m_Ambulances.ToEntityArray(Allocator.Temp);
@@ -96,6 +101,9 @@ namespace RealisticEMS
             if (!visible) return;
 
             if (NefDispatchSystem.NefByPatient.TryGetValue(patient, out var nef) && em.Exists(nef) && !units.Contains(nef)) units.Add(nef);
+            // Rescue heli and its doctor shuttle from dispatch on, not only once landed.
+            if (HelicopterSystem.HeliByPatient.TryGetValue(patient, out var heli) && em.Exists(heli) && !units.Contains(heli)) units.Add(heli);
+            if (HelicopterSystem.ShuttleByPatient.TryGetValue(patient, out var shuttle) && em.Exists(shuttle) && !units.Contains(shuttle)) units.Add(shuttle);
             units.AddRange(m_Responders.CarsOf(patient).Where(em.Exists));
             // Police/fire heading to the same location (covers cars from before a load).
             var location = units.Select(v => em.TryGetComponent<Ambulance>(v, out var va) ? va.m_TargetLocation : Entity.Null).FirstOrDefault(l => l != Entity.Null);
@@ -122,6 +130,7 @@ namespace RealisticEMS
         }
 
         private static string Min(uint frames) => $"{frames / OnSceneCareSystem.FramesPerGameMinute:0} min";
+        private static string DriveMin(uint frames) => $"{frames / OnSceneCareSystem.DriveFramesPerMinute:0} min";
 
         // Bar = treatment progress only (-1 hides it in the other phases).
         private void Timeline(Entity patient, List<Entity> units)
@@ -132,11 +141,11 @@ namespace RealisticEMS
             {
                 m_Phase = Mod.T("Anfahrt", "En route"); m_Progress = -1; m_Times = ""; return;
             }
-            var t = new List<string> { Mod.T("Seit Alarmierung: ", "Since dispatch: ") + Min(now - dispatch) };
-            if (arrive != 0) t.Add(Mod.T("RTW vor Ort nach ", "Ambulance on scene after ") + Min(arrive - dispatch));
-            if (nefArrive != 0) t.Add(Mod.T("NEF vor Ort nach ", "Doctor on scene after ") + Min(nefArrive - dispatch));
+            var t = new List<string> { Mod.T("Seit Alarmierung: ", "Since dispatch: ") + DriveMin(now - dispatch) };
+            if (arrive != 0) t.Add(Mod.T("RTW vor Ort nach ", "Ambulance on scene after ") + DriveMin(arrive - dispatch));
+            if (nefArrive != 0) t.Add(Mod.T("NEF vor Ort nach ", "Doctor on scene after ") + DriveMin(nefArrive - dispatch));
             if (start != 0) t.Add(Mod.T("Versorgung seit ", "Treating for ") + Min((transport != 0 ? transport : now) - start) + (care > 0 ? $" / {Min(care)}" : ""));
-            if (transport != 0) t.Add(Mod.T("Transport seit ", "Transporting for ") + Min(now - transport));
+            if (transport != 0) t.Add(Mod.T("Transport seit ", "Transporting for ") + DriveMin(now - transport));
             m_Times = string.Join("\n", t);
 
             if (transport != 0) { m_Phase = Mod.T("Transport ins Krankenhaus", "Transport to hospital"); m_Progress = start != 0 ? 1 : -1; } // treatment over: bar stays full

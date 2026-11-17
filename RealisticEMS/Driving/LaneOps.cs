@@ -394,7 +394,8 @@ namespace RealisticEMS
                 float vt = -1f;
                 foreach (var o in em.GetBuffer<LaneObject>(road, true)) if (o.m_LaneObject == v) vt = o.m_CurvePosition.x;
                 if (vt < 0f) continue;
-                Entity first = Entity.Null; float firstBehind = float.MaxValue; // nearest standing vehicle behind v
+                Entity first = Entity.Null; float firstBehind = float.MaxValue; // nearest standing car behind v (not of a call)
+                bool rearmost = true; // no other vehicle of a call stands behind v: v is the back of the group
                 using var objects = em.GetBuffer<LaneObject>(road, true).ToNativeArray(Allocator.Temp);
                 foreach (var o in objects)
                 {
@@ -405,6 +406,8 @@ namespace RealisticEMS
                     // ponytail: "behind" = 0-30 m before v in the lane's driving direction.
                     float behind = (vt - o.m_CurvePosition.y) * laneLength * (cl.m_CurvePosition.z >= cl.m_CurvePosition.x ? 1f : -1f);
                     if (behind < 0f || behind > 30f) continue;
+                    // Held units of a call lined up behind v never move: they are part of the obstacle, not traffic.
+                    if (AtScene(car)) { rearmost = false; continue; }
                     if (behind < firstBehind) { firstBehind = behind; first = car; }
                     if (!IsCivilian(car)) continue; // lane changes below are for normal traffic only
                     var parallel = ParallelLanes(cl);
@@ -427,8 +430,47 @@ namespace RealisticEMS
                         break;
                     }
                 }
-                if (first != Entity.Null && Speed(first) < 1f) TryStartObstaclePass(v, first);
+                if (rearmost && first != Entity.Null && Speed(first) < 1f) TryStartObstaclePass(v, first);
             }
+        }
+
+        /// <summary>
+        /// Parked at a call (Stopped): on the road on scene, held ambulance, held police/fire, NEF waiting on scene.
+        /// Only stopped vehicles: those are the only ones whose lane-list entry we may take out and put back.
+        /// </summary>
+        private bool AtScene(Entity e) =>
+            EntityManager.HasComponent<Stopped>(e) && !EntityManager.HasComponent<Deleted>(e)
+            && (SidewalkParkingSystem.OnRoad.Contains(e) || CrewHoldSystem.Held.Contains(e)
+                || ResponderDispatchSystem.HeldAt.ContainsKey(e) || NefDispatchSystem.NefByPatient.ContainsValue(e));
+
+        /// <summary>
+        /// <paramref name="v"/> plus the standing call vehicles ahead of it on its lane, each within its length + 15 m of
+        /// the previous one: the whole group is passed in one go. Last element = front of the group.
+        /// </summary>
+        private List<Entity> GroupAhead(Entity v)
+        {
+            var em = EntityManager;
+            var block = new List<Entity> { v };
+            var lane = em.GetComponentData<CarCurrentLane>(v).m_Lane;
+            if (!em.HasBuffer<LaneObject>(lane)) return block;
+            var ahead = new List<(Entity car, float along)>();
+            using var objects = em.GetBuffer<LaneObject>(lane, true).ToNativeArray(Allocator.Temp);
+            foreach (var o in objects)
+            {
+                var car = Tractor(o.m_LaneObject);
+                if (car == v || !AtScene(car) || !em.HasComponent<Transform>(car) || Speed(car) > 0.5f || ahead.Exists(a => a.car == car)) continue;
+                float along = Along(v, car);
+                if (along > 0f) ahead.Add((car, along));
+            }
+            ahead.Sort((a, b) => a.along.CompareTo(b.along));
+            float reach = 0f;
+            var last = v;
+            foreach (var (car, along) in ahead)
+            {
+                if (along - reach > (VehicleLength(last) + VehicleLength(car)) * 0.5f + 15f) break;
+                block.Add(car); reach = along; last = car;
+            }
+            return block;
         }
 
         // ---- One lane per direction: pass a standing emergency vehicle on the oncoming lane ----
@@ -436,7 +478,7 @@ namespace RealisticEMS
         private const int ObstaclePassMaxFrames = 900; // ~15 s, then the pass is given up
         private const float EmergencyLookout = 150f;   // emergency vehicles this close on either lane have priority
 
-        private class ObstaclePass { public Entity Car; public OncomingPass Lanes; public bool Removed; public int Frames; }
+        private class ObstaclePass { public Entity Car; public OncomingPass Lanes; public List<Entity> Block; public bool Removed; public int Frames; public float Lateral; }
         private readonly Dictionary<Entity, ObstaclePass> m_ObstaclePass = new Dictionary<Entity, ObstaclePass>(); // standing vehicle -> car passing it
 
         /// <summary>
@@ -451,14 +493,16 @@ namespace RealisticEMS
             if (ParallelLanes(cl).Count > 1 || !em.HasComponent<EdgeLane>(cl.m_Lane)) return; // multi-lane: lane change above
             var oncoming = OncomingLane(car, cl);
             if (oncoming == Entity.Null || LaneWidth(oncoming) < 2f) return;
-            // Room to get back in after v before the lane ends.
-            var vl = em.GetComponentData<CarCurrentLane>(v);
-            if (RemainingDistance(vl) < VehicleLength(v) * 0.5f + VehicleLength(car) + 3f) return;
+            // Room to get back in after the front of the group before the lane ends.
+            var block = GroupAhead(v);
+            var front = block[block.Count - 1];
+            var fl = em.GetComponentData<CarCurrentLane>(front);
+            if (fl.m_Lane != cl.m_Lane || RemainingDistance(fl) < VehicleLength(front) * 0.5f + VehicleLength(car) + 3f) return;
             if (EmergencyApproaching(car, v, cl.m_Lane, oncoming)) return;
             var lanes = new OncomingPass { Own = cl.m_Lane, Oncoming = oncoming, Entries = OncomingEntries(oncoming) };
             if (!OncomingClear(car, lanes)) return; // oncoming traffic: wait behind
-            m_ObstaclePass[v] = new ObstaclePass { Car = car, Lanes = lanes };
-            Mod.log.Info($"Fahrzeug {car.Index} überholt stehendes Einsatzfahrzeug {v.Index} auf der Gegenfahrbahn");
+            m_ObstaclePass[v] = new ObstaclePass { Car = car, Lanes = lanes, Block = block };
+            Mod.log.Info($"Fahrzeug {car.Index} überholt {block.Count} stehende(s) Einsatzfahrzeug(e) ab {v.Index} auf der Gegenfahrbahn");
         }
 
         /// <summary>An emergency vehicle with lights on our lane (behind us) or on the oncoming lane, within EmergencyLookout.</summary>
@@ -471,7 +515,8 @@ namespace RealisticEMS
                 foreach (var o in em.GetBuffer<LaneObject>(lane, true))
                 {
                     var other = Tractor(o.m_LaneObject);
-                    if (other == car || other == standing || !em.HasComponent<Car>(other) || !em.HasComponent<Transform>(other)) continue;
+                    // Held units on scene keep their lights on but go nowhere.
+                    if (other == car || other == standing || AtScene(other) || !em.HasComponent<Car>(other) || !em.HasComponent<Transform>(other)) continue;
                     if ((em.GetComponentData<Car>(other).m_Flags & CarFlags.Emergency) == 0) continue;
                     float along = Along(car, other);
                     if (lane == own ? along < 0f && along > -EmergencyLookout : math.abs(along) < EmergencyLookout) return true;
@@ -495,8 +540,9 @@ namespace RealisticEMS
                 return;
             }
             var cl = em.GetComponentData<CarCurrentLane>(car);
-            float clear = VehicleLength(v) * 0.5f + VehicleLength(car) * 0.5f + 2f;
-            if (Along(car, v) < -clear || cl.m_Lane != p.Lanes.Own)
+            var front = p.Block[p.Block.Count - 1];
+            float clear = VehicleLength(front) * 0.5f + VehicleLength(car) * 0.5f + 2f;
+            if (!em.Exists(front) || Along(car, front) < -clear || cl.m_Lane != p.Lanes.Own)
             {
                 EndObstaclePass(v, "vorbei"); // passed (or already on the next lane): vanilla steers it back into its lane
                 return;
@@ -506,9 +552,11 @@ namespace RealisticEMS
             float target = -(LaneWidth(p.Lanes.Own) + LaneWidth(p.Lanes.Oncoming)) * 0.5f;
             float lateral = SetLateral(car, ref cl, target, slide: Speed(car) < 0.5f && !p.Removed);
             em.SetComponentData(car, cl);
+            p.Lateral = math.max(p.Lateral, math.abs(lateral));
             if (!p.Removed && math.abs(lateral) >= math.abs(target) * 0.5f)
             {
-                RemoveFromLanes(v, track: false); // halfway out: drive past it (EndObstaclePass puts it back)
+                // Halfway out: drive past the whole group (EndObstaclePass puts it back).
+                foreach (var b in p.Block) if (b == v || AtScene(b) && em.HasComponent<CarCurrentLane>(b)) RemoveFromLanes(b, track: false);
                 p.Removed = true;
             }
             if (!p.Removed || !em.HasBuffer<LaneObject>(p.Lanes.Own)) return;
@@ -517,7 +565,7 @@ namespace RealisticEMS
             foreach (var o in objects)
             {
                 var other = Tractor(o.m_LaneObject);
-                if (other != car && other != v && em.HasComponent<Car>(other) && em.HasComponent<Transform>(other) && Along(v, other) < 0f) Freeze(other);
+                if (other != car && !p.Block.Contains(other) && em.HasComponent<Car>(other) && em.HasComponent<Transform>(other) && Along(v, other) < 0f) Freeze(other);
             }
         }
 
@@ -526,17 +574,18 @@ namespace RealisticEMS
             var em = EntityManager;
             var p = m_ObstaclePass[v];
             m_ObstaclePass.Remove(v);
-            if (p.Removed && em.Exists(v) && !em.HasComponent<Deleted>(v) && !em.HasComponent<Moving>(v) && em.HasComponent<CarCurrentLane>(v))
-            {
-                var lane = em.GetComponentData<CarCurrentLane>(v);
-                if (em.HasBuffer<LaneObject>(lane.m_Lane))
+            if (p.Removed)
+                foreach (var b in p.Block)
                 {
+                    // Only still-parked vehicles: a moving one is re-listed by vanilla itself (a second entry would go stale).
+                    if (!em.Exists(b) || em.HasComponent<Deleted>(b) || em.HasComponent<Moving>(b) || !em.HasComponent<Stopped>(b) || !em.HasComponent<CarCurrentLane>(b)) continue;
+                    var lane = em.GetComponentData<CarCurrentLane>(b);
+                    if (!em.HasBuffer<LaneObject>(lane.m_Lane)) continue;
                     var buffer = em.GetBuffer<LaneObject>(lane.m_Lane);
-                    NetUtils.RemoveLaneObject(buffer, v); // no duplicates
-                    NetUtils.AddLaneObject(buffer, v, lane.m_CurvePosition.xy); // obstacle again for the next car
+                    NetUtils.RemoveLaneObject(buffer, b); // no duplicates
+                    NetUtils.AddLaneObject(buffer, b, lane.m_CurvePosition.xy); // obstacle again for the next car
                 }
-            }
-            Mod.log.Info($"Überholen an Einsatzfahrzeug {v.Index}: {why}");
+            Mod.log.Info($"Überholen an Einsatzfahrzeug {v.Index}: {why} (Fahrzeug {p.Car.Index}, {p.Frames} Frames, seitlich {p.Lateral:0.0} m, ausgeblendet {p.Removed})");
         }
 
         private bool IsFree(Entity lane, float pos, Entity self, float ahead) => IsFreeWindow(lane, pos, self, -(VehicleLength(self) + 3f), ahead);

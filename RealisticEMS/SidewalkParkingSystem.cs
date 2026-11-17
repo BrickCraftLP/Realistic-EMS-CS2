@@ -34,7 +34,26 @@ namespace RealisticEMS
         private readonly Dictionary<Entity, (float3 spot, float length)> m_Spots = new Dictionary<Entity, (float3, float)>(); // vehicle -> sidewalk spot
         private UnitNamingSystem m_Units;
 
-        public override int GetUpdateInterval(SystemUpdatePhase phase) => 16;
+        private int m_Tick;
+
+        /// <summary>
+        /// The parking-lane entry (ParkAtCorner) is ours alone: vanilla only unlists a deleted vehicle from its own lane.
+        /// Left in the list, a destroyed vehicle is read by vanilla Burst parking jobs (native crash). Checked every frame,
+        /// so the entry goes while the vehicle is only tagged Deleted, before it is destroyed.
+        /// </summary>
+        private void PurgeParkLanes()
+        {
+            if (m_ParkLane.Count == 0) return;
+            var em = EntityManager;
+            List<Entity> gone = null;
+            foreach (var kv in m_ParkLane)
+            {
+                if (em.Exists(kv.Key) && !em.HasComponent<Deleted>(kv.Key)) continue;
+                if (em.HasBuffer<LaneObject>(kv.Value)) NetUtils.RemoveLaneObject(em.GetBuffer<LaneObject>(kv.Value), kv.Key);
+                (gone ??= new List<Entity>()).Add(kv.Key);
+            }
+            if (gone != null) foreach (var e in gone) m_ParkLane.Remove(e);
+        }
 
         protected override void OnCreate()
         {
@@ -55,6 +74,8 @@ namespace RealisticEMS
 
         protected override void OnUpdate()
         {
+            PurgeParkLanes();
+            if ((++m_Tick & 15) != 0) return; // the rest every 16 frames, as before
             var em = EntityManager;
             bool parking = Mod.Setting.ParkOnSidewalk;
             // Everyone standing by at a call, grouped by call location: held ambulances, the NEFs, held police and fire engines.

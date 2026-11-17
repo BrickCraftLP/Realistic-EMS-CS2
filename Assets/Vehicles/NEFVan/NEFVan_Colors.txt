@@ -1,0 +1,4 @@
+Colour variation channels (enter in the CS2 editor / prefab ColorProperties):
+  channel 0 (V_Body): #EDEDED
+  channel 1 (V_Stripe): #C7120D
+  channel 2 (V_Yellow): #F2CC14

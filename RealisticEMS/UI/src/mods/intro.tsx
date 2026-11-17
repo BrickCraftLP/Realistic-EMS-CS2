@@ -19,7 +19,9 @@ export const EmsIntro = () => {
     const ref = useRef<HTMLDivElement>(null);
     const ready = open && settings.length > 0; // start from the current settings, not the defaults
     useEffect(() => (ready && ref.current ? mount(ref.current, de ? "de" : "en", settings) : undefined), [ready]);
-    return open ? <div className="ems-intro" ref={ref} /> : null;
+    let dark = false; // follows the main panel's dark-mode toggle
+    try { dark = localStorage.getItem("realisticEMS.dark") === "1"; } catch { /* ignore */ }
+    return open ? <div className={"ems-intro" + (dark ? " dark" : "")} ref={ref} /> : null;
 };
 
 // Polyline sampler for the route paths (absolute M L H V C only). Replaces SVGPathElement.getPointAtLength.
@@ -55,7 +57,7 @@ function mount(root, lang0, cur) {
 const now = () => (window.performance ? performance.now() : Date.now());
 let lang = lang0, step = 0, raf = 0;
 const ENUMS = { CallMix: ["Realistic", "Balanced", "Dramatic"], CallVolume: ["Few", "Balanced", "Many"] };
-const S = { OnlyDepotsDispatch: true, AvailableOnlyAtDepot: true, CallVolume: "Balanced", CallMix: "Realistic", EnableNef: false, OnSceneMinutes: 60, ParkOnSidewalk: true,
+const S = { OnlyDepotsDispatch: true, FireStationAmbulances: false, AvailableOnlyAtDepot: true, CallVolume: "Balanced", CallMix: "Realistic", EnableNef: false, OnSceneMinutes: 60, ParkOnSidewalk: true,
     EmergencyCorridor: true, OncomingOvertake: true, EmergencyLaneChange: true, ClearRedLight: true, SirenOnlyWhenNeeded: false, BedCapacityPercent: 25, RejectFullHospitals: true };
 cur.forEach(it => { if (it.name in S) S[it.name] = ENUMS[it.name] ? ENUMS[it.name][it.value] ?? S[it.name] : it.bool ? !!it.value : it.value; });
 
@@ -67,6 +69,7 @@ const T = {
    {t:"Realistic EMS",s:""},
    {t:"Welcome to Realistic EMS",s:""},
    {t:"Dispatch",s:"Who sends the ambulance, and how severe are the calls?"},
+   {t:"Fire stations",s:"Should fire stations also house ambulances? The closest one responds, handy in rural areas."},
    {t:"Call volume",s:"How many emergency calls do you want?"},
    {t:"Call severity",s:"How serious are the emergencies you get? Pick a mix."},
    {t:"Emergency doctor",s:"Should hospitals also send an emergency doctor car? (experimental)"},
@@ -87,6 +90,7 @@ const T = {
    {t:"Realistic EMS",s:""},
    {t:"Willkommen bei Realistic EMS",s:""},
    {t:"Disposition",s:"Wer schickt den Rettungswagen, und wie schwer sind die Einsätze?"},
+   {t:"Feuerwachen",s:"Sollen Feuerwachen auch Rettungswagen haben? Es fährt der nächste, praktisch auf dem Land."},
    {t:"Einsatzhäufigkeit",s:"Wie viele Notrufe möchtest du?"},
    {t:"Einsatzschwere",s:"Wie schwer sind die Notfälle? Wähle einen Mix."},
    {t:"Notarzt",s:"Sollen Krankenhäuser zusätzlich einen Notarzt schicken? (experimentell)"},
@@ -105,7 +109,7 @@ const T = {
 root.innerHTML = `<div class="card"><div class="top"><div class="head"><h2 id="h"></h2><p class="sub" id="sub"></p></div><div class="corner"><button id="skip"></button></div></div>`
     + `<div class="stage" id="stage"></div><div class="lower"><div class="body" id="body"></div><div class="nav"><button id="back"></button><button id="next" class="go"></button><span></span></div><div class="dots" id="dots"></div></div></div>`;
 
-const N = 15;
+const N = 16;
 const $ = s => root.querySelector(s);
 const sq=(w,h,k)=>{const x=w/2,y=h/2;return `M${-x+k} ${-y}H${x-k}C${x} ${-y} ${x} ${-y} ${x} ${-y+k}V${y-k}C${x} ${y} ${x} ${y} ${x-k} ${y}H${-x+k}C${-x} ${y} ${-x} ${y} ${-x} ${y-k}V${-y+k}C${-x} ${-y} ${-x} ${-y} ${-x+k} ${-y}Z`};
 const CARS=[[100,100],[100,204],[100,308],[200,100],[200,204],[200,308]];
@@ -156,7 +160,23 @@ const building=m=>`<path d="${sq(200,130,30)}" transform="translate(150 75)" fil
     +`<path d="${sq(64,34,10)}" transform="translate(100 123)" fill="#14202e"/>`
     +(m?`<path d="M62 30H238" stroke="#e87333" stroke-width="6" stroke-linecap="round"/>`:`<path d="M150 28v26M137 41h26" stroke="#4db2ff" stroke-width="7" stroke-linecap="round"/>`)
     +`<text x="150" y="86" text-anchor="middle" font-size="20" font-weight="700" fill="#1b2a44">${T[lang].bld[m]}</text>`;
-const dstage=()=>[0,1].map(m=>`<div class="panel">${SV(`<rect width="300" height="500" fill="#2a3a30"/><rect y="140" width="300" height="360" fill="#808080"/><rect x="45" y="140" width="210" height="360" fill="#262626"/><path d="M150 140V500" stroke="#e8e8e8" stroke-width="3" stroke-dasharray="16 14"/><path class="geo" d="${DROUTE}" fill="none"/>${DEFS}<g class="fade">${AMB}${building(m)}</g>`)}</div>`).join("");
+const dscene=(veh,bld)=>SV(`<rect width="300" height="500" fill="#2a3a30"/><rect y="140" width="300" height="360" fill="#808080"/><rect x="45" y="140" width="210" height="360" fill="#262626"/><path d="M150 140V500" stroke="#e8e8e8" stroke-width="3" stroke-dasharray="16 14"/><path class="geo" d="${DROUTE}" fill="none"/>${DEFS}<g class="fade">${veh}${bld}</g>`);
+const dstage=()=>[0,1].map(m=>`<div class="panel">${dscene(AMB,building(m))}</div>`).join("");
+
+// ---- Fire stations: only fire engines leave (vanilla) vs. the fire station also sends an ambulance (StationFleetSystem).
+const FIRE_TXT={en:["Fire engines only","Also ambulances"],de:["Nur Löschfahrzeuge","Auch Rettungswagen"]};
+const FIRE_BLD={en:"Fire station",de:"Feuerwache"};
+const ENGINE=AMB.replace('fill="#e87333"','fill="#d32f2f"').replace('class="cross" fill="#fff"','class="cross" fill="none"');
+const fireHouse=()=>`<path d="${sq(200,130,30)}" transform="translate(150 75)" fill="#ecd3ce"/><path d="${sq(64,34,10)}" transform="translate(100 123)" fill="#14202e"/><path d="M62 30H238" stroke="#d32f2f" stroke-width="6" stroke-linecap="round"/><text x="150" y="86" text-anchor="middle" font-size="20" font-weight="700" fill="#1b2a44">${FIRE_BLD[lang]}</text>`;
+// Right panel: engine and ambulance leave one behind the other, each in a .v group with its own route copy for rig().
+const CONVOY=[AMB,ENGINE].map(v=>`<g class="v"><path class="geo" d="${DROUTE}" fill="none"/>${v}</g>`).join("");
+const fstage=()=>PANELS(2,FIRE_TXT[lang],m=>dscene(m?CONVOY:ENGINE,fireHouse()));
+function initFire(svg){
+  const vs=Array.from(svg.querySelectorAll(".v"));
+  if(!vs.length) return initDispatch(svg);
+  const rs=vs.map(rig), q=n=>svg.querySelector(n), GAP=140; // vehicle 100 + 40 gap; group 0 = ambulance (behind)
+  return t=>{q(".fade").setAttribute("opacity",FADE(t));const s=EIO((t-.8)/5.5)*(rs[0].L+110+GAP);rs.forEach((r,i)=>r.draw(Math.max(0,s-(rs.length-1-i)*GAP),t))};
+}
 function initDispatch(svg){
   const r=rig(svg), q=n=>svg.querySelector(n);
   return t=>{q(".fade").setAttribute("opacity",FADE(t));r.draw(EIO((t-.8)/5)*(r.L+110),t)};
@@ -382,19 +402,20 @@ function heading(txt){
 // Choice pages: key = setting, vals = value of panel 0,1,(2), stack = 3 panels below each other.
 const PG={
   2:{key:"OnlyDepotsDispatch",vals:[false,true],stage:dstage,init:initDispatch},
-  3:{key:"CallVolume",vals:["Few","Balanced","Many"],stage:cstage,stack:1},
-  4:{key:"CallMix",vals:["Realistic","Balanced","Dramatic"],stage:mstage,stack:1},
-  5:{key:"EnableNef",vals:[false,true],stage:nstage,init:initNef},
-  6:{key:"OnSceneMinutes",vals:[0,30,60],stage:sstage,init:initScene,stack:1},
-  7:{key:"ParkOnSidewalk",vals:[false,true],stage:pstage,init:initPark},
-  8:{key:"EmergencyCorridor",vals:[false,true],stage,init},
-  9:{key:"OncomingOvertake",vals:[false,true],stage:onstage,init:initOnc},
-  10:{key:"EmergencyLaneChange",vals:[false,true],stage:lstage,init:initLane},
-  11:{key:"ClearRedLight",vals:[false,true],stage:rstage,init:initRed},
-  12:{key:"SirenOnlyWhenNeeded",vals:[false,true],stage:sirStage,init:initSiren},
-  13:{key:"BedCapacityPercent",vals:BED_V,stage:bstage,stack:1,
+  3:{key:"FireStationAmbulances",vals:[false,true],stage:fstage,init:initFire},
+  4:{key:"CallVolume",vals:["Few","Balanced","Many"],stage:cstage,stack:1},
+  5:{key:"CallMix",vals:["Realistic","Balanced","Dramatic"],stage:mstage,stack:1},
+  6:{key:"EnableNef",vals:[false,true],stage:nstage,init:initNef},
+  7:{key:"OnSceneMinutes",vals:[0,30,60],stage:sstage,init:initScene,stack:1},
+  8:{key:"ParkOnSidewalk",vals:[false,true],stage:pstage,init:initPark},
+  9:{key:"EmergencyCorridor",vals:[false,true],stage,init},
+  10:{key:"OncomingOvertake",vals:[false,true],stage:onstage,init:initOnc},
+  11:{key:"EmergencyLaneChange",vals:[false,true],stage:lstage,init:initLane},
+  12:{key:"ClearRedLight",vals:[false,true],stage:rstage,init:initRed},
+  13:{key:"SirenOnlyWhenNeeded",vals:[false,true],stage:sirStage,init:initSiren},
+  14:{key:"BedCapacityPercent",vals:BED_V,stage:bstage,stack:1,
      set:v=>{bedCustom=v==="custom";S.BedCapacityPercent=bedCustom?BED_CUSTOM:v},isSel:v=>v==="custom"?bedCustom:!bedCustom&&S.BedCapacityPercent===v},
-  14:{key:"RejectFullHospitals",vals:[false,true],stage:hstage,init:initHosp}
+  15:{key:"RejectFullHospitals",vals:[false,true],stage:hstage,init:initHosp}
 };
 const panels=()=>Array.from($("#stage").children);
 function syncSel(){const g=PG[step];panels().forEach((p,i)=>p.classList.toggle("sel",!!g&&(g.isSel?g.isSel(g.vals[i]):S[g.key]===g.vals[i])))}

@@ -21,7 +21,7 @@ const C = {
     hospital: "#BA1A1A", depot: "#415F91", amb: "#B3261E", outline: "#FFFFFF",
 };
 
-interface Cam { tx: number; tz: number; yaw: number; pitch: number; dist: number; }
+export interface Cam { tx: number; tz: number; yaw: number; pitch: number; dist: number; }
 
 const bounds = (roads: number[], b: number[]) => {
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
@@ -32,7 +32,7 @@ const bounds = (roads: number[], b: number[]) => {
 };
 
 /** World (x, y up, z north) -> [screenX, screenY, depth]; depth <= 0 means behind the camera. */
-const camera = (c: Cam) => {
+export const camera = (c: Cam) => {
     const cy = Math.cos(c.yaw * RAD), sy = Math.sin(c.yaw * RAD), cp = Math.cos(c.pitch * RAD), sp = Math.sin(c.pitch * RAD);
     return (x: number, y: number, z: number) => {
         const dx = x - c.tx, dz = z - c.tz;

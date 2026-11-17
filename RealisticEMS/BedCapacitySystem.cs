@@ -16,7 +16,8 @@ namespace RealisticEMS
     public partial class BedCapacitySystem : GameSystemBase
     {
         private EntityQuery m_Query;
-        private readonly Dictionary<Entity, int> m_Original = new Dictionary<Entity, int>();
+        public static readonly Dictionary<Entity, int> Original = new Dictionary<Entity, int>(); // unscaled capacity per prefab
+        private Dictionary<Entity, int> m_Original => Original;
         private int m_Applied = -1;
 
         public override int GetUpdateInterval(SystemUpdatePhase phase) => 64;

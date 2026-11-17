@@ -9,15 +9,15 @@ namespace RealisticEMS
     /// <summary>Options: tabs and groups below; within a group, options appear in declaration order.</summary>
     [FileLocation(nameof(RealisticEMS))]
     [SettingsUITabOrder(Dispatch, Scene, Driving, General)]
-    [SettingsUIGroupOrder(Hospitals, Depots, Calls, Care, Doctor, Parking, WayAhead, Lanes, Corridor, Siren, About)]
-    [SettingsUIShowGroupName(Hospitals, Depots, Calls, Care, Doctor, Parking, WayAhead, Lanes, Corridor, Siren, About)]
+    [SettingsUIGroupOrder(Hospitals, Depots, Calls, Care, Doctor, Parking, WayAhead, Lanes, Corridor, Siren, Beta, About)]
+    [SettingsUIShowGroupName(Hospitals, Depots, Calls, Care, Doctor, Parking, WayAhead, Lanes, Corridor, Siren, Beta, About)]
     public class Setting : ModSetting
     {
         public const string Dispatch = "Dispatch", Scene = "Scene", Driving = "Driving", General = "General";
         public const string Hospitals = "Hospitals", Depots = "Depots", Calls = "Calls";
         public const string Care = "Care", Doctor = "Doctor", Parking = "Parking";
         public const string WayAhead = "WayAhead", Lanes = "Lanes", Corridor = "Corridor", Siren = "Siren";
-        public const string About = "About";
+        public const string About = "About", Beta = "Beta";
 
         public Setting(IMod mod) : base(mod) { SetDefaults(); } // ModSetting does not call it
 
@@ -42,6 +42,16 @@ namespace RealisticEMS
         [SettingsUISection(Dispatch, Depots)]
         [SettingsUISlider(min = 1, max = 40, step = 1)]
         public int DepotAmbulances { get; set; }
+
+        /// <summary>Fire stations also house ambulances (StationFleetSystem); they respond wherever they are closest.</summary>
+        [SettingsUISection(Dispatch, Depots)]
+        public bool FireStationAmbulances { get; set; }
+
+        /// <summary>Ambulances per fire station unless set by its building-panel slider; taken from the fire engine slots.</summary>
+        [SettingsUISection(Dispatch, Depots)]
+        [SettingsUIDisableByCondition(typeof(Setting), nameof(FireStationAmbulances), true)]
+        [SettingsUISlider(min = 0, max = 10, step = 1)]
+        public int FireStationAmbulanceDefault { get; set; }
 
         /// <summary>Callsign + AMPDS code as ambulance name.</summary>
         [SettingsUISection(Dispatch, Calls)]
@@ -76,6 +86,10 @@ namespace RealisticEMS
         [SettingsUIDisableByCondition(typeof(Setting), nameof(EnableNef), true)]
         [SettingsUISlider(min = 0, max = 120, step = 5)]
         public int NefMaxWaitMinutes { get; set; }
+
+        /// <summary>Experimental rescue helicopter from hospitals with a medical helicopter.</summary>
+        [SettingsUISection(Scene, Doctor)]
+        public bool EnableHelicopter { get; set; }
 
         [SettingsUISection(Scene, Parking)]
         public bool ParkOnSidewalk { get; set; }
@@ -120,6 +134,16 @@ namespace RealisticEMS
 
         // ---- General ----
 
+        /// <summary>Experimental Apple-Maps-style 3D map ("3D Beta" chip). Off = zero cost; the classic map is untouched.</summary>
+        [SettingsUISection(General, Beta)]
+        public bool EnableMap3dPro { get; set; }
+
+        /// <summary>0 = Auto (driven by the frame-budget gate), 1 low, 2 medium, 3 high.</summary>
+        [SettingsUISection(General, Beta)]
+        [SettingsUISlider(min = 0, max = 3, step = 1)]
+        [SettingsUIDisableByCondition(typeof(Setting), nameof(EnableMap3dPro), true)]
+        public int Map3dQuality { get; set; }
+
         /// <summary>Read-only; shown as text in Options.</summary>
         [SettingsUISection(General, About)]
         public string Version => typeof(Setting).Assembly.GetName().Version.ToString();
@@ -155,6 +179,7 @@ namespace RealisticEMS
             EnableNef = false;
             NefPerHospital = 2;
             NefMaxWaitMinutes = 30;
+            EnableHelicopter = false;
             OnSceneMinutes = 60;
             ParkOnSidewalk = true;
             ParkAtCrossing = true;
@@ -168,7 +193,11 @@ namespace RealisticEMS
             LogAmbulanceStates = false;
             DebugPassword = "";
             DepotAmbulances = 10;
+            FireStationAmbulances = false;
+            FireStationAmbulanceDefault = 1;
             BedCapacityPercent = 25;
+            EnableMap3dPro = false;
+            Map3dQuality = 0;
         }
     }
 
@@ -216,6 +245,13 @@ namespace RealisticEMS
             Group(Setting.Corridor, "Rettungsgasse und Überholen", "Emergency corridor and overtaking");
             Group(Setting.Siren, "Sirene", "Siren");
             Group(Setting.About, "Info", "About");
+            Group(Setting.Beta, "Experimentell (Beta)", "Experimental (Beta)");
+            Opt(nameof(Setting.EnableMap3dPro), "3D-Karte Beta (experimentell)", "3D map beta (experimental)",
+                "Zusätzliche 3D-Karte im Apple-Maps-Stil mit eigenen Low-Poly-Modellen und Live-Fahrzeugen. Arbeitet nur, wenn die Bildrate nicht leidet (z. B. pausierte Simulation). Die normale Karte bleibt unverändert.",
+                "Extra Apple-Maps-style 3D map with generated low-poly models and live vehicles. Only works when it does not cost framerate (e.g. paused simulation). The normal map stays unchanged.");
+            Opt(nameof(Setting.Map3dQuality), "3D-Karte Beta: Qualität", "3D map beta: quality",
+                "0 = Auto (nach Bildrate), 1 = niedrig, 2 = mittel, 3 = hoch.",
+                "0 = Auto (by framerate), 1 = low, 2 = medium, 3 = high.");
 
             Opt(nameof(Setting.Version), "Version", "Version", "Installierte Mod-Version.", "Installed mod version.");
             Opt(nameof(Setting.RejectFullHospitals), "Volle Spitäler ablehnen", "Reject full hospitals",
@@ -254,6 +290,9 @@ namespace RealisticEMS
             Opt(nameof(Setting.NefMaxWaitMinutes), "RTW wartet max. auf NEF (Spielminuten)", "Max. ambulance wait for doctor (game minutes)",
                 "Ist der RTW zuerst vor Ort, wartet er so lange auf den Notarzt, bevor er die Versorgung allein beginnt. Zählt ab Ankunft, nicht ab Alarmierung.",
                 "If the ambulance arrives first, it waits this long for the doctor before starting care alone. Counted from arrival, not from dispatch.");
+            Opt(nameof(Setting.EnableHelicopter), "Rettungshelikopter (experimentell)", "Rescue helicopter (experimental)",
+                "Spitäler mit Rettungshelikopter schicken ihn, wenn er schneller als der NEF ist oder der RTW ihn nachfordert. Er landet nur auf Sportplätzen (Basketball, Fussball, ...) in der Nähe; die Polizei fährt den Notarzt zum Patienten. Ist kein geeignetes Spital schnell per Strasse erreichbar (z.B. Insel mit kleiner Klinik), bringt der RTW den Patienten zum Helikopter und ist erst nach Rückkehr zur Wache wieder frei. Kliniken auf Inseln verlegen kritische Patienten per Helikopter.",
+                "Hospitals with a medical helicopter send it when it beats the doctor car or the ambulance on scene asks for it. It only lands on sports fields (basketball, football, ...) nearby; police drive the doctor to the patient. If no suitable hospital is quick to reach by road (e.g. an island with a small clinic), the ambulance brings the patient to the helicopter and is free again only back at its base. Clinics on islands fly out critical patients.");
             Opt(nameof(Setting.OnSceneMinutes), "Versorgung vor Ort (Spielminuten)", "On-scene care (game minutes)",
                 "So lange versorgt der RTW den Patienten vor Ort, bevor er ihn einlädt. Startet bei Ankunft des RTW, mit Notarzt erst wenn beide vor Ort sind. Die Anfahrt zählt nicht. 0 = sofort einladen (Vanilla).",
                 "How long the ambulance treats the patient on scene before loading. Starts when the ambulance arrives, with a doctor only once both are on scene. Travel time does not count. 0 = load immediately (vanilla).");
@@ -295,6 +334,12 @@ namespace RealisticEMS
             Opt(nameof(Setting.DepotAmbulances), "RTW pro Wache", "Ambulances per depot",
                 "Fahrzeuganzahl der Rettungswache. Erfordert Neustart.",
                 "Vehicle count of the Ambulance Depot. Requires restart.");
+            Opt(nameof(Setting.FireStationAmbulances), "RTW auch von Feuerwachen", "Ambulances from fire stations too",
+                "Feuerwachen beherbergen zusätzlich RTW. Es fährt immer das nächste freie Fahrzeug, so übernimmt auf dem Land die Feuerwache, in der Stadt die Rettungswache. Die RTW belegen Plätze der Löschfahrzeuge: Im Gebäudemenü der Feuerwache stellst du mit dem Regler ein, wie viele RTW statt Löschfahrzeuge dort stehen. Zählt für 'Nur Wachen schicken RTW' als Wache.",
+                "Fire stations also house ambulances. The closest free vehicle always responds, so in rural areas the fire station covers calls and in town the depot does. Ambulances take fire engine slots: the slider in the fire station's building panel sets how many ambulances instead of fire engines it has. Counts as a station for 'Only depots send ambulances'.");
+            Opt(nameof(Setting.FireStationAmbulanceDefault), "RTW pro Feuerwache (Standard)", "Ambulances per fire station (default)",
+                "Für Feuerwachen, deren Regler nicht verstellt wurde. Höchstens so viele, wie die Wache Löschfahrzeuge hat.",
+                "For fire stations whose slider was not changed. At most as many as the station has fire engine slots.");
             return d;
         }
 

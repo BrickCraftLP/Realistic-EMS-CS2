@@ -33,6 +33,12 @@ namespace RealisticEMS
         public void Suspend(int frames)
         {
             m_SuspendFrames = frames;
+            Reveal();
+        }
+
+        /// <summary>Gives the hidden hospitals their CanCure* flags back (until the next <see cref="Hide"/>).</summary>
+        public void Reveal()
+        {
             foreach (var kv in m_Cleared)
             {
                 if (!EntityManager.Exists(kv.Key) || !EntityManager.HasComponent<Hospital>(kv.Key)) continue;
@@ -84,7 +90,38 @@ namespace RealisticEMS
 
         protected override void OnUpdate()
         {
-            if (!Mod.Setting.RejectFullHospitals || m_SuspendFrames-- > 0) return;
+            HideHelicopters();
+            if (m_SuspendFrames-- > 0) return;
+            Hide();
+        }
+
+        /// <summary>
+        /// With the rescue helicopter on, vanilla must not send medical helicopters to ordinary calls: the hospital
+        /// pathfind only uses a hospital as a helicopter source while it has HasAvailableMedicalHelicopters, which
+        /// HospitalAISystem sets every 256 frames; cleared right after. HelicopterSystem picks its bases from
+        /// HospitalData, not this flag, so it still launches doctor missions, patient flights and transfers.
+        /// </summary>
+        private void HideHelicopters()
+        {
+            if (!Mod.Setting.EnableHelicopter) return;
+            var hospitals = m_Query.ToComponentDataArray<Hospital>(Allocator.Temp);
+            bool changed = false;
+            for (int i = 0; i < hospitals.Length; i++)
+            {
+                var h = hospitals[i];
+                if ((h.m_Flags & HospitalFlags.HasAvailableMedicalHelicopters) == 0) continue;
+                h.m_Flags &= ~HospitalFlags.HasAvailableMedicalHelicopters;
+                hospitals[i] = h;
+                changed = true;
+            }
+            if (changed) m_Query.CopyFromComponentDataArray(hospitals);
+            hospitals.Dispose();
+        }
+
+        /// <summary>Clears CanCure* on full hospitals so the hospital pathfind skips them.</summary>
+        public void Hide()
+        {
+            if (!Mod.Setting.RejectFullHospitals || m_SuspendFrames > 0) return;
             // ponytail: HasRoomForPatients is refreshed by HospitalAISystem every 256 frames, so a hospital that fills
             // between ticks still accepts until then. Count Patient buffers against combined HospitalData if that matters.
             var hospitals = m_Query.ToComponentDataArray<Hospital>(Allocator.Temp);
@@ -107,5 +144,21 @@ namespace RealisticEMS
             }
             if (changed) m_Query.CopyFromComponentDataArray(hospitals);
         }
+    }
+
+    /// <summary>
+    /// HealthProblemSystem reads the same CanCure* flags for patients already lying in a hospital: hidden, it thinks
+    /// the hospital cannot treat them and calls an ambulance to take them away, cancelled again once the flags are back
+    /// (seen in logs: ambulances sent to patients inside a full hospital, losing the call within seconds, over and over).
+    /// So the real flags are shown to HealthProblemSystem only: revealed right before it, hidden again right after.
+    /// </summary>
+    public partial class HospitalRevealSystem : GameSystemBase
+    {
+        protected override void OnUpdate() => World.GetExistingSystemManaged<HospitalSelectionSystem>().Reveal();
+    }
+
+    public partial class HospitalRehideSystem : GameSystemBase
+    {
+        protected override void OnUpdate() => World.GetExistingSystemManaged<HospitalSelectionSystem>().Hide();
     }
 }

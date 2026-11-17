@@ -175,14 +175,7 @@ namespace RealisticEMS
         /// <summary>Takes the car out of vanilla's AI and stops it, like vanilla PoliceCarAISystem.StopVehicle.</summary>
         private void Hold(Entity car, Call call, uint now, uint cap)
         {
-            var em = EntityManager;
-            em.AddComponentData(car, new TripSource(em.GetComponentData<Owner>(car).m_Owner, cap));
-            em.RemoveComponent<Moving>(car);
-            em.RemoveComponent<TransformFrame>(car);
-            em.RemoveComponent<InterpolatedTransform>(car);
-            em.RemoveComponent<Swaying>(car);
-            if (!em.HasComponent<Stopped>(car)) em.AddComponent<Stopped>(car);
-            if (!em.HasComponent<Updated>(car)) em.AddComponent<Updated>(car);
+            HoldVehicle(EntityManager, car, cap);
             call.Held = true; call.Since = now;
             HeldAt[car] = call.Location;
             Mod.log.Info($"{Name(car)} {car.Index}: bleibt am Einsatzort bei Patient {call.Patient.Index}");
@@ -194,16 +187,43 @@ namespace RealisticEMS
         /// </summary>
         private void Release(Entity car, Call call)
         {
-            var em = EntityManager;
             call.Held = false; call.Done = true;
-            em.RemoveComponent<TripSource>(car);
-            var lane = em.GetComponentData<CarCurrentLane>(car);
-            lane.m_LaneFlags &= ~Game.Vehicles.CarLaneFlags.EndOfPath;
-            em.SetComponentData(car, lane);
-            var po = em.GetComponentData<PathOwner>(car);
-            po.m_State |= PathFlags.Obsolete; // it may have been moved to the ambulance group
-            em.SetComponentData(car, po);
+            ReleaseVehicle(EntityManager, car);
             Mod.log.Info($"{Name(car)} {car.Index}: rückt ein");
+        }
+
+        /// <summary>
+        /// Stops a vehicle and keeps vanilla's AI off it: the vanilla vehicle AI systems skip vehicles with TripSource,
+        /// and VehicleSpawnSystem only counts its timer down. Also used by HelicopterSystem (cars and helicopters).
+        /// </summary>
+        public static void HoldVehicle(EntityManager em, Entity v, uint cap)
+        {
+            if (em.HasComponent<TripSource>(v)) return;
+            em.AddComponentData(v, new TripSource(em.GetComponentData<Owner>(v).m_Owner, cap));
+            em.RemoveComponent<Moving>(v);
+            em.RemoveComponent<TransformFrame>(v);
+            em.RemoveComponent<InterpolatedTransform>(v);
+            em.RemoveComponent<Swaying>(v);
+            if (!em.HasComponent<Stopped>(v)) em.AddComponent<Stopped>(v);
+            if (!em.HasComponent<Updated>(v)) em.AddComponent<Updated>(v);
+        }
+
+        /// <summary>
+        /// Back to vanilla, which starts the stopped vehicle and paths on from where it stands. EndOfPath must go:
+        /// vanilla deletes a returning car that has reached the end of its path.
+        /// </summary>
+        public static void ReleaseVehicle(EntityManager em, Entity v)
+        {
+            em.RemoveComponent<TripSource>(v);
+            if (em.HasComponent<CarCurrentLane>(v))
+            {
+                var lane = em.GetComponentData<CarCurrentLane>(v);
+                lane.m_LaneFlags &= ~Game.Vehicles.CarLaneFlags.EndOfPath;
+                em.SetComponentData(v, lane);
+            }
+            var po = em.GetComponentData<PathOwner>(v);
+            po.m_State |= PathFlags.Obsolete; // it may have been moved to the ambulance group
+            em.SetComponentData(v, po);
         }
 
         private string Name(Entity car) => EntityManager.HasComponent<Game.Vehicles.PoliceCar>(car) ? "Polizei" : "Feuerwehr";
@@ -212,7 +232,16 @@ namespace RealisticEMS
         {
             var em = EntityManager;
             if (!em.HasComponent<Transform>(location)) return;
-            float3 at = em.GetComponentData<Transform>(location).m_Position;
+            var e = CreateCar(em.GetComponentData<Transform>(location).m_Position, location, police);
+            if (e != Entity.Null) m_Cars[e] = new Call { Patient = patient, Location = location };
+        }
+
+        /// <summary>Police car from the nearest station with free patrol cars to target, not tracked here. Used by HelicopterSystem (doctor shuttle).</summary>
+        public Entity CreatePoliceCar(float3 near, Entity target) => CreateCar(near, target, true);
+
+        private Entity CreateCar(float3 at, Entity target, bool police)
+        {
+            var em = EntityManager;
             var station = police
                 ? Nearest(m_PoliceStations, at, s => (em.GetComponentData<PoliceStation>(s).m_Flags & PoliceStationFlags.HasAvailablePatrolCars) != 0)
                 : Nearest(m_FireStations, at, s => (em.GetComponentData<FireStation>(s).m_Flags & FireStationFlags.HasAvailableFireEngines) != 0);
@@ -220,7 +249,7 @@ namespace RealisticEMS
             var prefab = police
                 ? First(m_PolicePrefabs, p => p != NefPrefabSystem.NefPrefab && (em.GetComponentData<PoliceCarData>(p).m_PurposeMask & PolicePurpose.Patrol) != 0)
                 : First(m_FirePrefabs, p => true);
-            if (station == Entity.Null || prefab == Entity.Null) { Mod.log.Warn(police ? "Polizei: keine Wache mit freiem Streifenwagen" : "Feuerwehr: keine Wache mit freiem Fahrzeug"); return; }
+            if (station == Entity.Null || prefab == Entity.Null) { Mod.log.Warn(police ? "Polizei: keine Wache mit freiem Streifenwagen" : "Feuerwehr: keine Wache mit freiem Fahrzeug"); return Entity.Null; }
 
             using var created = new NativeArray<Entity>(1, Allocator.Temp); // array overload, see NefDispatchSystem.Spawn
             em.CreateEntity(em.GetComponentData<ObjectData>(prefab).m_Archetype, created);
@@ -233,8 +262,8 @@ namespace RealisticEMS
             em.AddComponentData(e, new Owner(station));
             if (police) em.SetComponentData(e, new Game.Vehicles.PoliceCar(PoliceCarFlags.Empty, 0, 0));
             else em.SetComponentData(e, new FireEngine(FireEngineFlags.Empty, 0, 0f, 1f));
-            em.SetComponentData(e, new Target(location));
-            m_Cars[e] = new Call { Patient = patient, Location = location };
+            em.SetComponentData(e, new Target(target));
+            return e;
         }
 
         // ponytail: straight-line distance and no per-station vehicle count; all cars may come from the same station.
