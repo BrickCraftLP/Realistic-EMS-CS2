@@ -46,7 +46,7 @@ namespace RealisticEMS
                 if (owner != Entity.Null && em.Exists(owner)) { if (!em.HasComponent<Updated>(owner)) em.AddComponent<Updated>(owner); }
                 else em.AddComponent<Deleted>(l);
             }
-            Mod.log.Info($"Rettungsgasse: {orphans.Count} temporäre Spur(en) aus dem Spielstand entfernt");
+            Log.Info($"removed temporary corridor lanes from save count={orphans.Count}");
         }
 
         /// <summary>
@@ -78,6 +78,9 @@ namespace RealisticEMS
                         if (d < bestDistance) { best = sl.m_SubLane; bestDistance = d; bestT = t; }
                     }
                 if (best == Entity.Null) { em.AddComponent<Deleted>(car); return; }
+                // Unlist from the lanes it leaves, else the entries go stale (see HighwayExit.KeepGapLane).
+                if (em.HasBuffer<LaneObject>(cl.m_Lane)) NetUtils.RemoveLaneObject(em.GetBuffer<LaneObject>(cl.m_Lane), car);
+                if (em.HasBuffer<LaneObject>(cl.m_ChangeLane)) NetUtils.RemoveLaneObject(em.GetBuffer<LaneObject>(cl.m_ChangeLane), car);
                 cl.m_Lane = best;
                 cl.m_ChangeLane = Entity.Null;
                 cl.m_CurvePosition = new float3(bestT, bestT, 1f);
@@ -90,7 +93,7 @@ namespace RealisticEMS
                 po.m_State |= PathFlags.Obsolete;
                 em.SetComponentData(car, po);
             }
-            Mod.log.Info($"Fahrzeug {car.Index}: von temporärer Spur aus dem Spielstand auf {(onOrphan ? "echte Spur gesetzt" : "neue Route")}");
+            Log.Debug($"car={car.Index} moved off temporary save lane: {(onOrphan ? "placed on real lane" : "rerouted")}");
         }
     }
 }

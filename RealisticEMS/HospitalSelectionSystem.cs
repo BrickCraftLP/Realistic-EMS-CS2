@@ -96,14 +96,14 @@ namespace RealisticEMS
         }
 
         /// <summary>
-        /// With the rescue helicopter on, vanilla must not send medical helicopters to ordinary calls: the hospital
+        /// Vanilla must not send medical helicopters to ordinary calls: the hospital
         /// pathfind only uses a hospital as a helicopter source while it has HasAvailableMedicalHelicopters, which
         /// HospitalAISystem sets every 256 frames; cleared right after. HelicopterSystem picks its bases from
         /// HospitalData, not this flag, so it still launches doctor missions, patient flights and transfers.
         /// </summary>
         private void HideHelicopters()
         {
-            if (!Mod.Setting.EnableHelicopter) return;
+            // Always, also with the rescue helicopter off: medical helicopters never answer ordinary calls.
             var hospitals = m_Query.ToComponentDataArray<Hospital>(Allocator.Temp);
             bool changed = false;
             for (int i = 0; i < hospitals.Length; i++)
@@ -130,7 +130,7 @@ namespace RealisticEMS
             // brings the patient to the ambulance's own building (= the depot). Fall back to vanilla ranking instead.
             bool anyRoom = false;
             for (int i = 0; i < hospitals.Length && !anyRoom; i++) anyRoom = CanAcceptPatients(hospitals[i]);
-            if (anyRoom != m_LastAnyRoom) { Mod.log.Info(anyRoom ? "Free beds available: rejecting full hospitals" : "All hospitals full: vanilla ranking"); m_LastAnyRoom = anyRoom; }
+            if (anyRoom != m_LastAnyRoom) { Log.Debug(anyRoom ? "Free beds available: rejecting full hospitals" : "All hospitals full: vanilla ranking"); m_LastAnyRoom = anyRoom; }
             if (!anyRoom) return;
             bool changed = false;
             for (int i = 0; i < hospitals.Length; i++)

@@ -65,6 +65,27 @@ namespace RealisticEMS
         [SettingsUISection(Dispatch, Calls)]
         public CallVolume CallVolume { get; set; }
 
+        /// <summary>Burning buildings get an alarm level: more engines and police by building type and street (FireAlarmSystem).</summary>
+        [SettingsUISection(Dispatch, Calls)]
+        public bool EnableFireAlarms { get; set; }
+
+        /// <summary>Close the burning building's street to through traffic (FireAlarmSystem cordon).</summary>
+        [SettingsUISection(Dispatch, Calls)]
+        public bool CloseStreetAtFire { get; set; }
+
+
+        /// <summary>Fire cover planner: max. straight-line distance (m) a station covers (FirePlanSystem).</summary>
+        [SettingsUISection(Dispatch, Calls)]
+        [SettingsUISlider(min = 500, max = 5000, step = 250)]
+        [SettingsUIHidden] // TODO FirePlanSystem.cs missing: show again with the button below
+        public int FirePlanRadius { get; set; }
+
+        /// <summary>Button: pauses the game and shows where fire stations and engines are needed (FirePlanSystem).</summary>
+        [SettingsUISection(Dispatch, Calls)]
+        [SettingsUIButton]
+        [SettingsUIHidden] // TODO FirePlanSystem.cs missing: restore `set => FirePlanSystem.Requested = true;` and drop this line
+        public bool PlanFireCoverage { set { } }
+
         // ---- On scene ----
 
         /// <summary>Game minutes an ambulance cares for the patient on scene before loading. 0 = vanilla.</summary>
@@ -135,10 +156,12 @@ namespace RealisticEMS
         // ---- General ----
 
         /// <summary>Experimental Apple-Maps-style 3D map ("3D Beta" chip). Off = zero cost; the classic map is untouched.</summary>
-        [SettingsUISection(General, Beta)]
-        public bool EnableMap3dPro { get; set; }
+        // Disabled for now: opening it crashes large cities natively (cohtml). Restore "{ get; set; }" and drop SettingsUIHidden to re-enable.
+        [SettingsUIHidden]
+        public bool EnableMap3dPro { get => false; set { } }
 
         /// <summary>0 = Auto (driven by the frame-budget gate), 1 low, 2 medium, 3 high.</summary>
+        [SettingsUIHidden]
         [SettingsUISection(General, Beta)]
         [SettingsUISlider(min = 0, max = 3, step = 1)]
         [SettingsUIDisableByCondition(typeof(Setting), nameof(EnableMap3dPro), true)]
@@ -148,14 +171,22 @@ namespace RealisticEMS
         [SettingsUISection(General, About)]
         public string Version => typeof(Setting).Assembly.GetName().Version.ToString();
 
-        /// <summary>Debug logging: off = only warnings/errors reach Logs/RealisticEMS.log.</summary>
+        /// <summary>Most verbose level written to Logs/RealisticEMS.log (see Log).</summary>
         [SettingsUISection(General, About)]
-        public bool LogAmbulanceStates
+        public LogLevel LogLevel
         {
-            get => m_Log;
-            set { m_Log = value; Mod.log.effectivenessLevel = value ? Colossal.Logging.Level.Info : Colossal.Logging.Level.Warn; }
+            get => Log.MaxLevel;
+            set => Log.MaxLevel = value;
         }
-        private bool m_Log;
+
+        /// <summary>RUST_LOG-style per-module overrides, e.g. "helicopter=trace,driving=debug" (see Log.Filter).</summary>
+        [SettingsUISection(General, About)]
+        [SettingsUITextInput]
+        public string LogFilter
+        {
+            get => Log.Filter;
+            set => Log.Filter = value;
+        }
 
         /// <summary>Button: copies the log into an export folder (LogExport).</summary>
         [SettingsUISection(General, About)]
@@ -180,6 +211,9 @@ namespace RealisticEMS
             NefPerHospital = 2;
             NefMaxWaitMinutes = 30;
             EnableHelicopter = false;
+            EnableFireAlarms = true;
+            CloseStreetAtFire = true;
+            FirePlanRadius = 1500;
             OnSceneMinutes = 60;
             ParkOnSidewalk = true;
             ParkAtCrossing = true;
@@ -190,7 +224,8 @@ namespace RealisticEMS
             ClearRedLight = true;
             ClearRedLightMaxCars = 2;
             SirenOnlyWhenNeeded = false;
-            LogAmbulanceStates = false;
+            LogLevel = LogLevel.Info;
+            LogFilter = "";
             DebugPassword = "";
             DepotAmbulances = 10;
             FireStationAmbulances = false;
@@ -221,6 +256,13 @@ namespace RealisticEMS
                 { "Assets.DESCRIPTION[" + DepotPrefabSystem.DepotName + "]", T(
                     "Rettungswache ohne Betten. Beherbergt viele RTW, die Patienten ins nächste Spital mit freien Betten bringen.",
                     "Ambulance station without beds. Houses many ambulances that bring patients to the nearest hospital with free capacity.") },
+                { "Assets.NAME[" + AmbulanceStationPrefabSystem.StationName + "]", T("Rettungswache (klein)", "Small Ambulance Station") },
+                { "Assets.DESCRIPTION[" + AmbulanceStationPrefabSystem.StationName + "]", T(
+                    "Kleine Rettungswache mit einem Fahrzeug: RTW oder (nur Deutsch) NAW, ein RTW mit Notarzt, der vor allem zu D- und Echo-Einsätzen fährt.",
+                    "Small ambulance station with one vehicle: an ambulance or (German only) a NAW, an ambulance with emergency doctor that mainly takes D and Echo calls.") },
+                { "Assets.NAME[" + AmbulanceStationPrefabSystem.UpgradeName + "]", T("Fahrzeughalle", "Vehicle Garage") },
+                { "Assets.DESCRIPTION[" + AmbulanceStationPrefabSystem.UpgradeName + "]", T(
+                    "Platz für 3 weitere RTW (4 insgesamt).", "Room for 3 more ambulances (4 in total).") },
             };
             void Opt(string name, string labelDe, string labelEn, string descDe, string descEn)
             {
@@ -273,8 +315,8 @@ namespace RealisticEMS
             d[m_Setting.GetEnumValueLocaleID(CallMix.Balanced)] = T("Ausgewogen", "Balanced");
             d[m_Setting.GetEnumValueLocaleID(CallMix.Dramatic)] = T("Dramatisch", "Dramatic");
             Opt(nameof(Setting.CallVolume), "Anzahl der Einsätze", "Number of calls",
-                "Wie viele Kranken- und Verletztenmeldungen es gibt. Wenige: etwa halb so viele wie in Vanilla. Ausgewogen: wie Vanilla. Viele: etwa doppelt so viele. Todesfälle sind nicht betroffen.",
-                "How many sick and injured calls happen. Few: about half of vanilla. Balanced: as vanilla. Many: about twice as many. Deaths are not affected.");
+                "Wie viele Kranken- und Verletztenmeldungen es gibt. Wenige: etwa ein Viertel von Vanilla. Ausgewogen: etwa halb so viele wie Vanilla. Viele: wie Vanilla. Todesfälle sind nicht betroffen.",
+                "How many sick and injured calls happen. Few: about a quarter of vanilla. Balanced: about half of vanilla. Many: as vanilla. Deaths are not affected.");
             d[m_Setting.GetEnumValueLocaleID(CallVolume.Few)] = T("Wenige", "Few");
             d[m_Setting.GetEnumValueLocaleID(CallVolume.Balanced)] = T("Ausgewogen", "Balanced");
             d[m_Setting.GetEnumValueLocaleID(CallVolume.Many)] = T("Viele", "Many");
@@ -290,6 +332,18 @@ namespace RealisticEMS
             Opt(nameof(Setting.NefMaxWaitMinutes), "RTW wartet max. auf NEF (Spielminuten)", "Max. ambulance wait for doctor (game minutes)",
                 "Ist der RTW zuerst vor Ort, wartet er so lange auf den Notarzt, bevor er die Versorgung allein beginnt. Zählt ab Ankunft, nicht ab Alarmierung.",
                 "If the ambulance arrives first, it waits this long for the doctor before starting care alone. Counted from arrival, not from dispatch.");
+            Opt(nameof(Setting.EnableFireAlarms), "Brandalarm-Stufen", "Fire alarm levels",
+                "Brennende Gebäude bekommen je nach Gebäudetyp und Strasse mehr Löschfahrzeuge und Polizei. Brennt es nach 20 Spielminuten noch, wird nachalarmiert.",
+                "Burning buildings get more engines and police depending on building type and street. Still burning after 20 game minutes: next alarm.");
+            Opt(nameof(Setting.CloseStreetAtFire), "Strasse bei Brand sperren", "Close street at fires",
+                "Die Polizei sperrt die Strasse des brennenden Gebäudes an beiden Enden. Durchgangsverkehr und Busse fahren eine Umleitung, Einsatzfahrzeuge und Anwohner kommen weiter durch.",
+                "Police close the burning building's street at both ends. Through traffic and buses take a detour; emergency vehicles and residents still get through.");
+            Opt(nameof(Setting.FirePlanRadius), "Brandschutzplanung: Einsatzradius (m)", "Fire cover plan: station radius (m)",
+                "Wie weit (Luftlinie) eine Feuerwache Einsätze abdecken soll. Brände weiter weg zählen als nicht abgedeckt.",
+                "How far (straight line) one fire station should cover calls. Fires further away count as not covered.");
+            Opt(nameof(Setting.PlanFireCoverage), "Brandschutz planen", "Plan fire cover",
+                "Pausiert das Spiel und zeigt auf einer Karte, wo neue Feuerwachen nötig sind und wie viele Löschfahrzeuge jede Wache braucht. Grundlage sind die Brände seit dem Laden des Spielstands: zuerst muss es also ein paar Mal gebrannt haben.",
+                "Pauses the game and shows on a map where new fire stations are needed and how many fire engines each station needs. Based on the fires since the save was loaded, so a few fires must have happened first.");
             Opt(nameof(Setting.EnableHelicopter), "Rettungshelikopter (experimentell)", "Rescue helicopter (experimental)",
                 "Spitäler mit Rettungshelikopter schicken ihn, wenn er schneller als der NEF ist oder der RTW ihn nachfordert. Er landet nur auf Sportplätzen (Basketball, Fussball, ...) in der Nähe; die Polizei fährt den Notarzt zum Patienten. Ist kein geeignetes Spital schnell per Strasse erreichbar (z.B. Insel mit kleiner Klinik), bringt der RTW den Patienten zum Helikopter und ist erst nach Rückkehr zur Wache wieder frei. Kliniken auf Inseln verlegen kritische Patienten per Helikopter.",
                 "Hospitals with a medical helicopter send it when it beats the doctor car or the ambulance on scene asks for it. It only lands on sports fields (basketball, football, ...) nearby; police drive the doctor to the patient. If no suitable hospital is quick to reach by road (e.g. an island with a small clinic), the ambulance brings the patient to the helicopter and is free again only back at its base. Clinics on islands fly out critical patients.");
@@ -323,9 +377,17 @@ namespace RealisticEMS
             Opt(nameof(Setting.SirenOnlyWhenNeeded), "Sirene nur bei Bedarf", "Siren only when needed",
                 "Einsatzfahrzeuge fahren mit Blaulicht, aber ohne Sirene. Die Sirene ertönt nur, wenn sie gebraucht wird: im Stau oder in der Rettungsgasse, beim Überholen auf der Gegenfahrbahn und vor einer roten Ampel. Danach läuft sie noch ~3 s weiter. Das Fahrverhalten ändert sich nicht. Gilt für alle Einsatzfahrzeuge mit Blaulicht: RTW, NEF, Polizei und Feuerwehr.",
                 "Emergency vehicles drive with lights but without the siren. The siren only sounds when it is needed: in a traffic jam or emergency corridor, while overtaking on the oncoming lane, and in front of a red light. It keeps sounding for ~3 s afterwards. Driving behaviour does not change. Applies to every emergency vehicle with lights: ambulance, emergency doctor, police and fire brigade.");
-            Opt(nameof(Setting.LogAmbulanceStates), "Debug-Protokoll", "Debug logging",
-                "Schreibt jede Zustandsänderung und Entscheidung nach Logs/RealisticEMS.log. Nur zur Fehlersuche, Warnungen und Fehler werden immer protokolliert.",
-                "Writes every state change and decision to Logs/RealisticEMS.log. For bug reports only; warnings and errors are always logged.");
+            Opt(nameof(Setting.LogLevel), "Protokoll-Stufe", "Log level",
+                "Wie viel nach Logs/RealisticEMS.log geschrieben wird. Info: Start und Prefabs. Debug: jede Entscheidung pro Fahrzeug (für Fehlerberichte). Trace: zusätzlich Diagnose pro Frame, sehr viel.",
+                "How much is written to Logs/RealisticEMS.log. Info: startup and prefabs. Debug: every per-vehicle decision (for bug reports). Trace: also per-frame diagnostics, very verbose.");
+            Opt(nameof(Setting.LogFilter), "Protokoll-Filter je Modul", "Per-module log filter",
+                "Wie RUST_LOG: Modul=Stufe, durch Kommas getrennt, z.B. \"helicopter=trace,driving=debug,driving::siren=off\". Gilt auch für Untermodule; die längste Übereinstimmung gewinnt. Ein Wert ohne Modul (z.B. \"warn\") ersetzt die Protokoll-Stufe. Die Modulnamen stehen in jeder Zeile im Protokoll (realistic_ems::...).",
+                "Like RUST_LOG: module=level, comma separated, e.g. \"helicopter=trace,driving=debug,driving::siren=off\". Applies to submodules too; the longest match wins. A value without a module (e.g. \"warn\") replaces the log level. Module names appear on every line in the log (realistic_ems::...).");
+            d[m_Setting.GetEnumValueLocaleID(LogLevel.Error)] = "Error";
+            d[m_Setting.GetEnumValueLocaleID(LogLevel.Warn)] = "Warn";
+            d[m_Setting.GetEnumValueLocaleID(LogLevel.Info)] = "Info";
+            d[m_Setting.GetEnumValueLocaleID(LogLevel.Debug)] = "Debug";
+            d[m_Setting.GetEnumValueLocaleID(LogLevel.Trace)] = "Trace";
             Opt(nameof(Setting.ExportLog), "Protokoll exportieren", "Export log",
                 "Kopiert das Protokoll mit SHA-256-Hash in einen Ordner unter Logs/, damit es sich leicht an einen Fehlerbericht anhängen lässt.",
                 "Copies the log with a SHA-256 hash into a folder under Logs/, ready to attach to a bug report.");

@@ -19,8 +19,9 @@ interface Hospital { name: string; used: number; beds: number; accepts: boolean;
 interface Station { name: string; kind: "rtw" | "nef" | "police" | "fire"; total: number; free: number; onCall: number; x: number; z: number; }
 // history: 12 ints per sample (oldest first): onCall, returning, total, bedsUsed, bedsTotal, new calls, then new calls per level (E D C B A O).
 interface Stats { calls: number; sampleMinutes: number; history: number[]; levels: number[]; response: number[]; reasons: { reason: string; n: number }[]; }
-interface Police { callsign: string; status: string; station: string; x: number; z: number; }
-interface State { overview: Overview; vehicles: Vehicle[]; hospitals: Hospital[]; stations: Station[]; police: Police[]; stats: Stats; }
+// Police and fire engines (fire: only those on a call); call = patient index as on Vehicle, 0 = none.
+interface Police { callsign: string; status: string; station: string; call: number; code?: string; level?: string; reason?: string; callNo: string; address: string; id: number; ver: number; x: number; z: number; }
+interface State { overview: Overview; vehicles: Vehicle[]; hospitals: Hospital[]; stations: Station[]; police: Police[]; fire?: Police[]; stats: Stats; }
 
 const open$ = bindValue<boolean>("realisticEMS", "open", false);
 const debug$ = bindValue<boolean>("realisticEMS", "debug", false);
@@ -447,12 +448,28 @@ const DebugTab = () => (
         <div className={styles.note}>{t("Zufällige Bürger in einem Gebäude werden krank oder verletzt.", "Random citizens inside a building get sick or injured.")}</div>
         {DEBUG_KINDS.map(d => (
             <div key={d.kind} className={styles.toolbar}>
-                <span className={styles.countLabel}>{t(d.de, d.en)}</span>
+                <span className={styles.debugLabel}>{t(d.de, d.en)}</span>
                 {[1, 5, 20].map(n => <button key={n} className={styles.chip} onClick={() => trigger("realisticEMS", "debugCall", d.kind, n)}>× {n}</button>)}
             </div>
         ))}
+        <div className={styles.blockHead}><h2>{t("Brand auslösen", "Start a fire")}</h2></div>
+        <div className={styles.note}>{t("Zündet ein zufälliges Gebäude des Typs an und springt hin (FireAlarmSystem).", "Ignites a random building of the type and jumps there (FireAlarmSystem).")}</div>
+        <div className={styles.toolbar}>
+            {DEBUG_FIRES.map(f => <button key={f.kind} className={styles.chip} onClick={() => trigger("realisticEMS", "debugFire", f.kind)}>{t(f.de, f.en)}</button>)}
+        </div>
     </section>
 );
+
+const DEBUG_FIRES = [
+    { kind: "selected", de: "Ausgewähltes Gebäude", en: "Selected building" },
+    { kind: "Small", de: "Einfamilienhaus / klein", en: "House / small" },
+    { kind: "Medium", de: "Mehrfamilienhaus", en: "Medium residential" },
+    { kind: "Large", de: "Hochhaus / Büro", en: "High-rise / office" },
+    { kind: "Industrial", de: "Industrie", en: "Industrial" },
+    { kind: "Public", de: "Spital / Schule", en: "Hospital / school" },
+    { kind: "alarm", de: "Nachalarmieren", en: "Next alarm" },
+    { kind: "out", de: "Alle Brände löschen", en: "Put out all fires" },
+] as const;
 
 // Map canvas in drawing units; markers are placed in % of it, so the CSS size can differ.
 const MAP_W = 1000, MAP_H = 560, MAP_PAD = 16;
@@ -581,6 +598,97 @@ const KarteTab = ({ s, compact }: { s: State; compact?: boolean }) => {
     );
 };
 
+// ---- Fire cover plan (FirePlanSystem.cs): where stations and how many engines ----
+
+interface PlanSite { x: number; z: number; have: number; need: number; calls: number; isNew: boolean; name: string; }
+interface FirePlan { seq: number; radius: number; calls: number[]; sites: PlanSite[]; } // calls: x, z, site index
+const firePlan$ = bindValue<FirePlan | null>("realisticEMS", "firePlan", null);
+const runPlan = () => trigger("realisticEMS", "firePlanRun");
+const PLAN_RADII = [1000, 1500, 2000, 3000];
+
+const PlanTab = () => {
+    const plan = useValue(firePlan$);
+    const roads = useValue(roads$);
+    const canvas = useRef<HTMLCanvasElement>(null);
+    const fit = useMemo(() => projection(roads), [roads]);
+    useEffect(() => {
+        const ctx = canvas.current?.getContext("2d");
+        if (!ctx || !plan) return;
+        ctx.clearRect(0, 0, MAP_W, MAP_H);
+        ctx.strokeStyle = "rgba(20, 24, 31, 0.22)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let i = 0; i + 7 < roads.length; i += 8) {
+            const [ax, ay] = fit(roads[i], roads[i + 1]), [bx, by] = fit(roads[i + 2], roads[i + 3]);
+            const [cx, cy] = fit(roads[i + 4], roads[i + 5]), [dx, dy] = fit(roads[i + 6], roads[i + 7]);
+            ctx.moveTo(ax, ay);
+            ctx.bezierCurveTo(bx, by, cx, cy, dx, dy);
+        }
+        ctx.stroke();
+        const r = Math.abs(fit(plan.radius, 0)[0] - fit(0, 0)[0]);
+        for (const s of plan.sites) {
+            const [x, y] = fit(s.x, s.z);
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, 2 * Math.PI);
+            ctx.fillStyle = s.isNew ? "rgba(240, 138, 36, 0.14)" : "rgba(79, 174, 106, 0.14)";
+            ctx.strokeStyle = s.isNew ? "#f08a24" : "#4fae6a";
+            ctx.fill(); ctx.stroke();
+        }
+        for (let i = 0; i + 2 < plan.calls.length; i += 3) {
+            const [x, y] = fit(plan.calls[i], plan.calls[i + 1]);
+            ctx.fillStyle = plan.sites[plan.calls[i + 2]]?.isNew ? "#e8473e" : "#4c5566";
+            ctx.fillRect(x - 3, y - 3, 6, 6);
+        }
+    }, [plan, roads, fit]);
+    const head = (
+        <div className={styles.cardHead}>
+            <h2>{t("Brandschutzplanung", "Fire cover plan")}</h2>
+            <span className={styles.zoom}>
+                {PLAN_RADII.map(r => <button key={r} className={plan?.radius === r ? styles.chipOn : styles.chip}
+                    onClick={() => { trigger("realisticEMS", "setSetting", "FirePlanRadius", r); runPlan(); }}>{r} m</button>)}
+                <button className={styles.chip} onClick={runPlan}>{t("Berechnen", "Calculate")}</button>
+            </span>
+        </div>
+    );
+    if (!plan || plan.seq === 0) return <section className={styles.card}>{head}
+        <Empty>{t("Berechnen pausiert das Spiel und zeigt, wo Feuerwachen und Löschfahrzeuge fehlen.", "Calculate pauses the game and shows where fire stations and engines are missing.")}</Empty></section>;
+    const n = plan.calls.length / 3;
+    if (n === 0) return <section className={styles.card}>{head}
+        <Empty>{t("Noch keine Brände seit dem Laden. Lass die Stadt laufen, bis es ein paar Mal gebrannt hat.", "No fires since loading yet. Let the city run until a few fires have happened.")}</Empty></section>;
+    const fresh = plan.sites.filter(s => s.isNew);
+    const covered = plan.sites.filter(s => !s.isNew).reduce((a, s) => a + s.calls, 0);
+    return (
+        <section className={styles.card}>
+            {head}
+            <div className={styles.note}>{t(`${n} Brände · ${Math.round((covered / n) * 100)}% von bestehenden Wachen im Radius ${plan.radius} m abgedeckt (Luftlinie)`,
+                `${n} fires · ${Math.round((covered / n) * 100)}% covered by existing stations within ${plan.radius} m (straight line)`)}</div>
+            <div className={styles.map}>
+                <canvas ref={canvas} width={MAP_W} height={MAP_H} className={styles.mapCanvas} />
+                {plan.sites.map((s, i) => <Marker key={i} at={fit(s.x, s.z)} className={s.isNew ? styles.mkNewSite : styles.mkStation}
+                    title={s.isNew ? t(`Neue Wache: ${s.need} Löschfahrzeuge`, `New station: ${s.need} engines`) : `${s.name}: ${s.have} → ${s.need}`}
+                    label={s.isNew ? `N${fresh.indexOf(s) + 1} · ${s.need}` : s.need > s.have ? `${s.have}→${s.need}` : undefined} />)}
+            </div>
+            <div className={`${styles.legend} ${styles.mapLegend}`}>
+                <span className={`${styles.status} ${styles.legendItem}`}><span className={styles.mkStation} />{t("Bestehende Wache", "Existing station")}</span>
+                <span className={`${styles.status} ${styles.legendItem}`}><span className={styles.mkNewSite} />{t("Neue Wache bauen", "Build new station")}</span>
+                <span className={`${styles.status} ${styles.legendItem}`}>{t("Rot: Brand ohne Wache im Radius", "Red: fire with no station in range")}</span>
+            </div>
+            {fresh.map((s, i) => (
+                <div key={"n" + i} className={styles.planRow}>
+                    <b>N{i + 1}</b> · {t(`Neue Feuerwache mit ${s.need} Löschfahrzeugen · ${s.calls} Brände`, `New fire station with ${s.need} engines · ${s.calls} fires`)}
+                </div>
+            ))}
+            {plan.sites.filter(s => !s.isNew).map((s, i) => (
+                <div key={"s" + i} className={styles.planRow}>
+                    <b>{s.name}</b> · {s.calls === 0 ? t("keine Brände im Gebiet", "no fires in its area")
+                        : s.need > s.have ? t(`${s.have} → ${s.need} Löschfahrzeuge (zu wenig) · ${s.calls} Brände`, `${s.have} → ${s.need} engines (too few) · ${s.calls} fires`)
+                        : t(`${s.have} Löschfahrzeuge reichen · ${s.calls} Brände`, `${s.have} engines are enough · ${s.calls} fires`)}
+                </div>
+            ))}
+        </section>
+    );
+};
+
 // ---- Dashboard: map, alerts, assignments, demand in one grid ----
 
 interface Alert { sev: "high" | "medium" | "low"; title: string; text: string; }
@@ -616,7 +724,8 @@ const Card = ({ title, action, onAction, children }: { title: string; action?: s
     </section>
 );
 
-interface Call { key: string; callNo: string; address: string; code: string; level: string; reason: string; destination: string; units: Vehicle[]; }
+type Unit = { callsign: string; status: string; station: string; destination?: string; id: number; ver: number; };
+interface Call { key: string; callNo: string; address: string; code: string; level: string; reason: string; destination: string; units: Unit[]; }
 
 // Call id = patient entity index from DispatchUISystem; units without one (0) each stay their own row.
 const activeCalls = (s: State): Call[] => {
@@ -630,10 +739,18 @@ const activeCalls = (s: State): Call[] => {
         c.units.push(v);
         calls.set(key, c);
     }
+    // Police and fire brigade of a call join its row; ones without a call stay out of this tab.
+    for (const u of [...s.police, ...(s.fire ?? [])].filter(u => u.call && isActive(u))) {
+        const key = String(u.call);
+        const c = calls.get(key) ?? { key, callNo: u.callNo, address: u.address, code: "", level: "", reason: "", destination: "", units: [] };
+        if (!c.code && u.code) Object.assign(c, { code: u.code, level: u.level, reason: u.reason }); // priority even before the ambulance row exists
+        c.units.push(u);
+        calls.set(key, c);
+    }
     return [...calls.values()].sort((a, b) => levelRank(a.level) - levelRank(b.level));
 };
 
-const jumpTo = (v: Vehicle) => trigger("realisticEMS", "jumpTo", v.id, v.ver);
+const jumpTo = (v: { id: number; ver: number }) => trigger("realisticEMS", "jumpTo", v.id, v.ver);
 
 /** Active calls; click one to list its units, click a unit to follow it in game. */
 const EinsaetzeTab = ({ s }: { s: State }) => {
@@ -652,7 +769,7 @@ const EinsaetzeTab = ({ s }: { s: State }) => {
                         <span className={styles.dim}>{c.units.length} {t("Einheiten", "units")}</span>
                     </div>
                     {open === c.key && c.units.map(u => (
-                        <div key={u.callsign} className={styles.row} style={{ cursor: "pointer", paddingLeft: "48rem" }} title={t("Zum Fahrzeug springen", "Jump to unit")} onClick={() => jumpTo(u)}>
+                        <div key={`${u.id}:${u.ver}`} className={styles.row} style={{ cursor: "pointer", paddingLeft: "48rem" }} title={t("Zum Fahrzeug springen", "Jump to unit")} onClick={() => jumpTo(u)}>
                             <span className={styles.strong} style={{ width: "160rem" }}>{u.callsign}<span className={styles.sub}>{u.station}</span></span>
                             <Status status={u.status} />
                             <span className={styles.clip} style={{ flex: 1 }}>{u.destination}</span>
@@ -807,7 +924,7 @@ const SETTING_GROUPS = {
     Disposition: { en: "Dispatch", names: ["RejectFullHospitals", "AvailableOnlyAtDepot", "OnlyDepotsDispatch", "DepotAmbulances", "BedCapacityPercent"] },
     Notarzt: { en: "Doctor & care", names: ["EnableNef", "NefPerHospital", "NefMaxWaitMinutes", "OnSceneMinutes"] },
     Fahrverhalten: { en: "Driving", names: ["ParkOnSidewalk", "ParkAtCrossing", "PushBlockers", "EmergencyLaneChange","ClearRedLight", "ClearRedLightMaxCars", "EmergencyCorridor", "OncomingOvertake", "SirenOnlyWhenNeeded"] },
-    Anzeige: { en: "Display & debug", names: ["ShowUnitNames", "LogAmbulanceStates"] },
+    Anzeige: { en: "Display", names: ["ShowUnitNames"] },
 } as const;
 type SettingGroup = keyof typeof SETTING_GROUPS;
 
@@ -841,11 +958,11 @@ const SettingsTab = ({ group }: { group: SettingGroup }) => {
 
 // ---- Shell: sidebar with menus and submenus ----
 
-type Page = "Dashboard" | "Einsätze" | "Karte" | "Statistik" | "Fahrzeuge" | "Wachen" | "Spitäler" | "Debug" | `Einstellungen/${SettingGroup}`;
+type Page = "Dashboard" | "Einsätze" | "Karte" | "Brandschutz" | "Statistik" | "Fahrzeuge" | "Wachen" | "Spitäler" | "Debug" | `Einstellungen/${SettingGroup}`;
 const NAV: { de: string; en: string; items: { id: Page; de: string; en: string }[] }[] = [
     { de: "Übersicht", en: "Dashboard", items: [{ id: "Dashboard", de: "Übersicht", en: "Dashboard" }] },
     { de: "Einsätze", en: "Calls", items: [{ id: "Einsätze", de: "Einsätze", en: "Calls" }] },
-    { de: "Karte", en: "Map", items: [{ id: "Karte", de: "Karte", en: "Map" }] },
+    { de: "Karte", en: "Map", items: [{ id: "Karte", de: "Karte", en: "Map" }, { id: "Brandschutz", de: "Brandschutz", en: "Fire cover" }] },
     { de: "Statistik", en: "Statistics", items: [{ id: "Statistik", de: "Statistik", en: "Statistics" }] },
     { de: "Ressourcen", en: "Resources", items: [
         { id: "Fahrzeuge", de: "Fahrzeuge", en: "Vehicles" }, { id: "Wachen", de: "Wachen", en: "Stations" }, { id: "Spitäler", de: "Spitäler", en: "Hospitals" }] },
@@ -894,6 +1011,8 @@ export const EmsPanel = () => {
     const [win, setWin] = useState<Win>(24);
     const [q, setQ] = useState("");
     const [focusCall, setFocusCall] = useState<{ key: string } | null>(null);
+    const planSeq = useValue(firePlan$)?.seq ?? 0;
+    useEffect(() => { if (planSeq > 0) setPage("Brandschutz"); }, [planSeq]); // "Plan fire cover" button
     useLang();
     if (!open) return null;
     const active = s ? s.vehicles.filter(isActive).length : 0;
@@ -915,6 +1034,7 @@ export const EmsPanel = () => {
                             : page === "Statistik" ? <LageTab s={s} win={win} />
                             : page === "Einsätze" ? <EinsaetzeTab s={s} />
                             : page === "Karte" ? <KarteTab s={s} />
+                            : page === "Brandschutz" ? <PlanTab />
                             : page === "Fahrzeuge" ? <FahrzeugeTab s={s} />
                             : page === "Spitäler" ? <SpitaelerTab s={s} />
                             : <WachenTab s={s} />}

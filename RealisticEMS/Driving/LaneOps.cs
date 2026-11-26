@@ -383,7 +383,7 @@ namespace RealisticEMS
         {
             var em = EntityManager;
             foreach (var v in new List<Entity>(m_ObstaclePass.Keys))
-                if (!SidewalkParkingSystem.OnRoad.Contains(v)) EndObstaclePass(v, "Einsatzfahrzeug fährt weiter");
+                if (!SidewalkParkingSystem.OnRoad.Contains(v)) EndObstaclePass(v, "emergency vehicle moved on");
             foreach (var v in SidewalkParkingSystem.OnRoad)
             {
                 if (!em.Exists(v) || !em.HasComponent<CarCurrentLane>(v)) continue;
@@ -426,7 +426,7 @@ namespace RealisticEMS
                             po.m_State |= Game.Pathfind.PathFlags.Obsolete; // repath from the new lane
                             em.SetComponentData(car, po);
                         }
-                        Mod.log.Info($"Auto {car.Index} wechselt die Spur, um an Einsatzfahrzeug {v.Index} vorbeizufahren");
+                        Log.Debug($"car={car.Index} changing lane to pass emergency vehicle={v.Index}");
                         break;
                     }
                 }
@@ -502,7 +502,7 @@ namespace RealisticEMS
             var lanes = new OncomingPass { Own = cl.m_Lane, Oncoming = oncoming, Entries = OncomingEntries(oncoming) };
             if (!OncomingClear(car, lanes)) return; // oncoming traffic: wait behind
             m_ObstaclePass[v] = new ObstaclePass { Car = car, Lanes = lanes, Block = block };
-            Mod.log.Info($"Fahrzeug {car.Index} überholt {block.Count} stehende(s) Einsatzfahrzeug(e) ab {v.Index} auf der Gegenfahrbahn");
+            Log.Debug($"car={car.Index} overtaking stopped emergency vehicles count={block.Count} first={v.Index} on oncoming lane");
         }
 
         /// <summary>An emergency vehicle with lights on our lane (behind us) or on the oncoming lane, within EmergencyLookout.</summary>
@@ -536,7 +536,7 @@ namespace RealisticEMS
             var car = p.Car;
             if (++p.Frames > ObstaclePassMaxFrames || !em.Exists(car) || em.HasComponent<Deleted>(car) || !em.HasComponent<CarCurrentLane>(car))
             {
-                EndObstaclePass(v, "abgebrochen");
+                EndObstaclePass(v, "aborted");
                 return;
             }
             var cl = em.GetComponentData<CarCurrentLane>(car);
@@ -544,7 +544,7 @@ namespace RealisticEMS
             float clear = VehicleLength(front) * 0.5f + VehicleLength(car) * 0.5f + 2f;
             if (!em.Exists(front) || Along(car, front) < -clear || cl.m_Lane != p.Lanes.Own)
             {
-                EndObstaclePass(v, "vorbei"); // passed (or already on the next lane): vanilla steers it back into its lane
+                EndObstaclePass(v, "passed"); // passed (or already on the next lane): vanilla steers it back into its lane
                 return;
             }
             CloseOncoming(p.Lanes);   // cars about to turn into the oncoming lane wait
@@ -585,7 +585,7 @@ namespace RealisticEMS
                     NetUtils.RemoveLaneObject(buffer, b); // no duplicates
                     NetUtils.AddLaneObject(buffer, b, lane.m_CurvePosition.xy); // obstacle again for the next car
                 }
-            Mod.log.Info($"Überholen an Einsatzfahrzeug {v.Index}: {why} (Fahrzeug {p.Car.Index}, {p.Frames} Frames, seitlich {p.Lateral:0.0} m, ausgeblendet {p.Removed})");
+            Log.Debug($"pass around vehicle={v.Index} ended: {why} car={p.Car.Index} frames={p.Frames} lateral={p.Lateral:0.0}m hidden={p.Removed}");
         }
 
         private bool IsFree(Entity lane, float pos, Entity self, float ahead) => IsFreeWindow(lane, pos, self, -(VehicleLength(self) + 3f), ahead);

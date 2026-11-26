@@ -282,7 +282,7 @@ $slide: 0.34s $ease-emph;
 .note {
     margin-top: 8rem;
     font-size: 13rem;
-    color: $ink-3;
+    color: $ink-2; // on-surface-variant: outline ($ink-3) is too faint for text
 }
 
 .levels {
@@ -608,6 +608,8 @@ $slide: 0.34s $ease-emph;
     color: $ink;
 }
 
+// M3 body-large on surface: own color (game default ink is unreadable here), grows so long labels don't clip.
+.debugLabel { flex: 1; min-width: 0; padding-right: 12rem; font-size: 14rem; line-height: 20rem; color: $ink; }
 .countLabel { display: flex; flex-direction: row; align-items: center; width: 150rem; padding-right: 10rem; }
 .countNum { width: 40rem; text-align: right; font-variant-numeric: tabular-nums; color: $ink-2; }
 
@@ -848,3 +850,7 @@ $slide: 0.34s $ease-emph;
 .trendSvg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
 .trendDot { position: absolute; width: 10rem; height: 10rem; margin: -5rem 0 0 -5rem; border-radius: 5rem; }
 .trendChip { display: inline-block; margin-top: 10rem; }
+
+// Fire cover plan: proposed new fire station.
+.mkNewSite { width: 16rem; height: 16rem; border-radius: 4rem; background-color: #f08a24; border: 2rem solid #fff; }
+.planRow { padding: 6rem 0; font-size: 14rem; color: $ink-2; }

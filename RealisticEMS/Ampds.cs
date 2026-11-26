@@ -27,7 +27,7 @@ namespace RealisticEMS
         // Response: only RTW, NEF and AED count. KTW/NKT/1450 become one non-urgent RTW (the game always transports).
         public int Rtw, Nef, Aed;
         // Police cars sent by ResponderDispatchSystem. Psychiatry (25): 1 for O/A up to 4 for D/E. AED (First Responder): 2.
-        public int Police => Protocol == 25 ? Math.Max(1, Math.Min(4, (int)Level)) : Aed > 0 ? 2 : 0;
+        public int Police => Protocol == 25 ? Math.Max(1, Math.Min(4, (int)Level)) : Aed > 0 || (Protocol == 11 && Level >= AmpdsLevel.Delta) ? 2 : 0; // choking D/E: 2 too
         public int Fire => Aed > 0 ? 1 : 0; // fire brigade as First Responder with the AED
         public bool Urgent => Level >= AmpdsLevel.Charlie;
 
@@ -62,8 +62,18 @@ namespace RealisticEMS
             using var stream = typeof(Ampds).Assembly.GetManifestResourceStream("RealisticEMS.Data.einsatzcodes.csv");
             using var reader = new StreamReader(stream, Encoding.UTF8);
             Codes = Parse(reader.ReadToEnd());
-            Mod.log.Info($"Loaded {Codes.Count} Einsatzcodes");
+            // Determinant 00 is the "Aufwertung" (override) row, not a real call. CSV order kept, so picks are unchanged.
+            s_ByProtocol.Clear();
+            foreach (var c in Codes)
+            {
+                if (c.Determinant == 0) continue;
+                if (!s_ByProtocol.TryGetValue(c.Protocol, out var list)) s_ByProtocol[c.Protocol] = list = new List<AmpdsCode>();
+                list.Add(c);
+            }
+            Log.Info($"loaded call codes count={Codes.Count}");
         }
+
+        private static readonly Dictionary<int, List<AmpdsCode>> s_ByProtocol = new Dictionary<int, List<AmpdsCode>>();
 
         public static List<AmpdsCode> Parse(string csv)
         {
@@ -139,9 +149,7 @@ namespace RealisticEMS
             var rnd = new Random(seed);
             var pool = PoolFor(flags, cause, age, female, seed);
             int protocol = pool[rnd.Next(pool.Length)];
-            // Determinant 00 is the "Aufwertung" (override) row, not a real call.
-            var all = Codes.Where(c => c.Protocol == protocol && c.Determinant != 0).ToList();
-            if (all.Count == 0) return null;
+            if (!s_ByProtocol.TryGetValue(protocol, out var all)) return null;
             var w = WeightsFor(health, (flags & HealthProblemFlags.Dead) != 0, mix);
             // Only levels this protocol has; weights of missing levels drop out.
             var present = Enumerable.Range(0, 6).Where(l => w[l] > 0 && all.Any(c => (int)c.Level == l)).ToList();
@@ -184,7 +192,7 @@ namespace RealisticEMS
         /// <summary>Runs at load; logs an error if parsing or selection regresses.</summary>
         public static void SelfCheck()
         {
-            void Expect(bool ok, string what) { if (!ok) Mod.log.Error("Ampds self-check failed: " + what); }
+            void Expect(bool ok, string what) { if (!ok) Log.Error("Ampds self-check failed: " + what); }
             var c = new AmpdsCode { RawUnits = "2 RTW / NEF / FISU / AED / OA" };
             ParseUnits(c);
             Expect(c.Rtw == 2 && c.Nef == 1 && c.Aed == 1 && c.Police == 2 && c.Fire == 1, "unit parse 2 RTW/NEF/AED");
@@ -199,7 +207,8 @@ namespace RealisticEMS
             var crash = Pick(HealthProblemFlags.Injured, CallCause.TrafficAccident, CitizenAge.Adult, false, 80, 7);
             Expect(crash != null && crash.Protocol == 29, "traffic -> 29");
             int Deltas(CallMix m) => Enumerable.Range(0, 1000).Count(s => Pick(HealthProblemFlags.Sick, CallCause.None, CitizenAge.Adult, false, 30, s, m)?.Level >= AmpdsLevel.Delta);
-            Expect(Deltas(CallMix.Realistic) < Deltas(CallMix.Balanced) && Deltas(CallMix.Balanced) < Deltas(CallMix.Dramatic), "call mix presets order D/E share");
+            int balanced = Deltas(CallMix.Balanced);
+            Expect(Deltas(CallMix.Realistic) < balanced && balanced < Deltas(CallMix.Dramatic), "call mix presets order D/E share");
         }
     }
 }

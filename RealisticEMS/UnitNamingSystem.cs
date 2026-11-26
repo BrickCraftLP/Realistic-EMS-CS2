@@ -114,8 +114,9 @@ namespace RealisticEMS
                 var a = ambulances[i];
                 if (!m_Callsign.TryGetValue(e, out var callsign))
                 {
-                    string station = StationLabel(owners[i].m_Owner, stations);
-                    callsign = m_Callsign[e] = NewCallsign($"{(NefDispatchSystem.IsNef(EntityManager, e) ? Mod.T("NEF", "DOC") : EntityManager.HasComponent<Game.Vehicles.Helicopter>(e) ? Mod.T("RTH", "HEMS") : Mod.T("RTW", "AMB"))} {station}-");
+                    string station = NefDispatchSystem.IsNef(EntityManager, e) ? StationLabel(owners[i].m_Owner, stations)
+                        : StationCallsignSection.AmbulanceOf(EntityManager, owners[i].m_Owner) ?? (stations.IndexOf(owners[i].m_Owner) + 1).ToString();
+                    callsign = m_Callsign[e] = NewCallsign($"{(NefDispatchSystem.IsNef(EntityManager, e) ? Mod.T("NEF", "DOC") : StationFleetSystem.IsNaw(EntityManager, e) ? "NAW" : EntityManager.HasComponent<Game.Vehicles.Helicopter>(e) ? Mod.T("RTH", "HEMS") : Mod.T("RTW", "AMB"))} {station}-");
                 }
 
                 bool onCall = a.m_TargetPatient != Entity.Null && (a.m_State & (AmbulanceFlags.Dispatched | AmbulanceFlags.Transporting)) != 0;
@@ -127,7 +128,7 @@ namespace RealisticEMS
                         call = (a.m_TargetPatient, Ampds.Classify(EntityManager, a.m_TargetPatient));
                         m_Call[e] = call;
                         if (call.code != null)
-                            Mod.log.Info($"{callsign} assigned {call.code} {call.code.Complaint} - {call.code.Reason} | needs {call.code.UnitsText()} (raw: {call.code.RawUnits}) {(call.code.Urgent ? "urgent" : "non-urgent")} (patient {a.m_TargetPatient.Index})");
+                            Log.Debug($"{callsign} assigned {call.code} {call.code.Complaint} - {call.code.Reason} | needs {call.code.UnitsText()} (raw: {call.code.RawUnits}) {(call.code.Urgent ? "urgent" : "non-urgent")} (patient {a.m_TargetPatient.Index})");
                     }
                     string status = (a.m_State & AmbulanceFlags.Transporting) != 0 ? Mod.T("Transport", "transporting") : Mod.T("Anfahrt", "en route");
                     name = call.code == null ? $"{callsign} | {status}"

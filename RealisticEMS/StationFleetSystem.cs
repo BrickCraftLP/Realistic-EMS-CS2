@@ -49,6 +49,17 @@ namespace RealisticEMS
     }
 
     /// <summary>
+    /// Station option (building panel): 1 = its ambulances are NAWs (ambulance with emergency doctor: counts as RTW+NEF,
+    /// mainly takes D/Echo calls; a fire station then runs just one), 2 = fire station hosts one NEF. No component = off. Saved with the city.
+    /// </summary>
+    public struct StationNaw : IComponentData, ISerializable
+    {
+        public byte m_Mode;
+        public void Serialize<TWriter>(TWriter writer) where TWriter : IWriter => writer.Write(m_Mode);
+        public void Deserialize<TReader>(TReader reader) where TReader : IReader => reader.Read(out m_Mode);
+    }
+
+    /// <summary>
     /// Ambulances from fire stations (Setting.FireStationAmbulances): every prefab with FireStationData gets HospitalData
     /// (0 beds, ambulance capacity = its fire engine capacity) and the stations get Game.Buildings.Hospital, so vanilla
     /// HospitalAISystem spawns, dispatches and parks ambulances there like at a depot. Off: both are removed again and
@@ -61,7 +72,7 @@ namespace RealisticEMS
     /// </summary>
     public partial class StationFleetSystem : GameSystemBase
     {
-        private EntityQuery m_PrefabsToAdd, m_PrefabsToRemove, m_StationsToAdd, m_StationsToRemove, m_Stations, m_Parked, m_Beds, m_Police;
+        private EntityQuery m_PrefabsToAdd, m_PrefabsToRemove, m_StationsToAdd, m_StationsToRemove, m_Stations, m_Parked, m_Beds, m_Police, m_Painted;
         private SimulationSystem m_Sim;
         private readonly List<Entity> m_ParkedAmb = new List<Entity>(), m_ParkedEng = new List<Entity>();
 
@@ -79,6 +90,13 @@ namespace RealisticEMS
             m_Beds = GetEntityQuery(ComponentType.ReadWrite<Hospital>(), ComponentType.ReadOnly<Patient>(), ComponentType.ReadOnly<StationCaps>(), ComponentType.Exclude<Deleted>());
             m_Police = GetEntityQuery(ComponentType.ReadOnly<PoliceStation>(), ComponentType.ReadOnly<OwnedVehicle>(), ComponentType.ReadWrite<ServiceDispatch>(),
                 ComponentType.ReadOnly<StationCaps>(), ComponentType.Exclude<Deleted>());
+            // IgnoreComponentEnabledState: a station not painted yet has CustomMeshColor disabled.
+            m_Painted = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[] { ComponentType.ReadOnly<Hospital>(), ComponentType.ReadOnly<CustomMeshColor>(), ComponentType.ReadOnly<PrefabRef>() },
+                None = new[] { ComponentType.ReadOnly<Patient>(), ComponentType.ReadOnly<Deleted>(), ComponentType.ReadOnly<Temp>() },
+                Options = EntityQueryOptions.IgnoreComponentEnabledState,
+            });
             m_Parked = GetEntityQuery(ComponentType.ReadOnly<Ambulance>(), ComponentType.ReadOnly<ParkedCar>(), ComponentType.ReadOnly<Owner>(), ComponentType.Exclude<Deleted>());
         }
 
@@ -101,7 +119,18 @@ namespace RealisticEMS
         /// <summary>Ambulances the station may run: slider value, else the default (fire stations) or all slots (depots).</summary>
         public static int Ambulances(EntityManager em, Entity station, int slots) =>
             math.clamp(em.TryGetComponent(station, out StationFleet f) ? f.m_Ambulances
-                : em.HasComponent<FireStation>(station) ? Mod.Setting.FireStationAmbulanceDefault : slots, 0, slots);
+                : em.HasComponent<FireStation>(station) ? Mod.Setting.FireStationAmbulanceDefault : slots, 0, Mode(em, station) == 1 && em.HasComponent<FireStation>(station) ? math.min(slots, 1) : slots);
+
+        /// <summary>StationNaw mode of a station (0 = off).</summary>
+        public static int Mode(EntityManager em, Entity station) => em.TryGetComponent(station, out StationNaw n) ? n.m_Mode : 0;
+
+        /// <summary>Ambulance of a station in NAW mode (German only).</summary>
+        public static bool IsNaw(EntityManager em, Entity vehicle) =>
+            em.TryGetComponent(vehicle, out Owner o) && Mode(em, o.m_Owner) == 1 && Mod.German;
+
+        /// <summary>NAWs mainly serve D/Echo calls: Omega/Alpha/Bravo (and unclassified) go to other stations.</summary>
+        private static bool LowAcuity(EntityManager em, Entity patient) =>
+            Ampds.Classify(em, patient)?.Level is AmpdsLevel l && l <= AmpdsLevel.Bravo;
 
         public const int NefMax = 4; // ponytail: fixed slider range for doctor cars per hospital
 
@@ -143,8 +172,27 @@ namespace RealisticEMS
         public static int NefLimit(EntityManager em, Entity hospital) =>
             em.TryGetComponent(hospital, out StationCaps c) && c.m_Nef >= 0 ? c.m_Nef : Mod.Setting.NefPerHospital;
 
+        /// <summary>Taxi-depot-based ambulance stations: rescue colours instead of taxi yellow (once per building).</summary>
+        private void PaintStations()
+        {
+            if (AmbulanceStationPrefabSystem.Colors is not ColorSet colors || m_Painted.IsEmptyIgnoreFilter) return;
+            var prefabs = World.GetOrCreateSystemManaged<PrefabSystem>();
+            if (!prefabs.TryGetEntity(AmbulanceStationPrefabSystem.Prefab, out var stationPrefab)) return;
+            using var buildings = m_Painted.ToEntityArray(Allocator.Temp);
+            foreach (var b in buildings)
+            {
+                if (EntityManager.GetComponentData<PrefabRef>(b).m_Prefab != stationPrefab || EntityManager.IsComponentEnabled<CustomMeshColor>(b)) continue;
+                var buf = EntityManager.GetBuffer<CustomMeshColor>(b);
+                buf.Clear();
+                buf.Add(new CustomMeshColor { m_ColorSet = colors });
+                EntityManager.SetComponentEnabled<CustomMeshColor>(b, true);
+                if (!EntityManager.HasComponent<BatchesUpdated>(b)) EntityManager.AddComponent<BatchesUpdated>(b);
+            }
+        }
+
         protected override void OnUpdate()
         {
+            PaintStations();
             EnforceBeds();
             EnforcePolice();
             bool on = Mod.Setting.FireStationAmbulances;
@@ -155,11 +203,13 @@ namespace RealisticEMS
             foreach (var e in stations)
             {
                 bool fire = EntityManager.HasComponent<FireStation>(e);
-                if (!fire && !EntityManager.HasComponent<StationFleet>(e)) continue; // depot without slider value: vanilla
+                if (!fire && !EntityManager.HasComponent<StationFleet>(e) && !IsNawStation(e)) continue; // depot without slider value: vanilla
                 int slots = Slots(EntityManager, e), amb = Ambulances(EntityManager, e, slots);
                 Enforce(e, amb, fire ? slots - amb : -1);
             }
         }
+
+        private bool IsNawStation(Entity e) => Mode(EntityManager, e) == 1 && Mod.German;
 
         /// <summary>Slider beds override the prefab capacity (also above it): room for patients iff patients &lt; beds. Patients stay when lowered.</summary>
         private void EnforceBeds()
@@ -226,7 +276,7 @@ namespace RealisticEMS
                         m_AmbulanceCapacity = EntityManager.GetComponentData<FireStationData>(p).m_FireEngineCapacity,
                         m_HealthRange = new int2(0, 100),
                     });
-                Mod.log.Info($"Fire station ambulances: {prefabs.Length} fire station prefabs got ambulance slots");
+                Log.Info($"Fire station ambulances: {prefabs.Length} fire station prefabs got ambulance slots");
             }
             if (m_StationsToAdd.IsEmpty) return;
             using var stations = m_StationsToAdd.ToEntityArray(Allocator.Temp);
@@ -257,7 +307,7 @@ namespace RealisticEMS
             var em = EntityManager;
             if (!em.HasBuffer<CustomMeshColor>(amb))
             {
-                if (red && m_NoTintLogged.Add(amb)) Mod.log.Warn($"Ambulance {amb.Index}: body supports no custom colours, fire livery skipped");
+                if (red && m_NoTintLogged.Add(amb)) Log.Warn($"Ambulance {amb.Index}: body supports no custom colours, fire livery skipped");
                 return;
             }
             bool enabled = em.IsComponentEnabled<CustomMeshColor>(amb);
@@ -323,11 +373,12 @@ namespace RealisticEMS
             if (em.GetBuffer<ServiceDispatch>(station, true).Length == 0) return;
             var dispatches = em.GetBuffer<ServiceDispatch>(station);
             int ambReq = 0, engReq = 0;
+            bool naw = IsNawStation(station);
             for (int i = 0; i < dispatches.Length; i++)
             {
                 var r = dispatches[i].m_Request;
                 bool drop = em.TryGetComponent(r, out HealthcareRequest hr)
-                    ? hr.m_Type == HealthcareRequestType.Ambulance && ++ambReq > ambFree
+                    ? hr.m_Type == HealthcareRequestType.Ambulance && (++ambReq > ambFree || (naw && LowAcuity(em, hr.m_Citizen)))
                     : engines >= 0 && em.HasComponent<FireRescueRequest>(r) && ++engReq > engFree;
                 if (drop) dispatches.RemoveAt(i--);
             }

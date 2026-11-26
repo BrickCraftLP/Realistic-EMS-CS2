@@ -31,6 +31,9 @@ namespace RealisticEMS
             if (lane.m_ChangeLane != Entity.Null)
             {
                 if (st.Changing || lane.m_ChangeProgress >= 0.5f) return; // ours, or nearly done: let it finish
+                // Vanilla listed it on the change lane and only unlists lanes it still sees: a leftover entry goes stale
+                // once the vehicle is deleted and crashes Burst jobs reading that lane (native null read).
+                if (EntityManager.HasBuffer<LaneObject>(lane.m_ChangeLane)) NetUtils.RemoveLaneObject(EntityManager.GetBuffer<LaneObject>(lane.m_ChangeLane), e);
                 lane.m_ChangeLane = Entity.Null;
                 lane.m_ChangeProgress = 0f;
             }
@@ -38,13 +41,17 @@ namespace RealisticEMS
             st.Pinned.Add(lane.m_Lane);
             int at = Array.IndexOf(cw.Lanes, lane.m_Lane);
             float target = at >= 0 ? cw.EvTarget(at, lane.m_CurvePosition.x, m_Frame) : 0f; // a lane the layout lacks (short turn lane): its centre
+            // Exit ahead its own lane has no connection to (ramp on the far side): change over lane by lane before the
+            // junction, else it reaches the end on the wrong lane, re-plans and drives on past the exit.
+            int exit = at >= 0 && !cw.TwoWay && RemainingDistance(lane) < ExitPrepDistance ? ExitLane(e, lane, cw, at) : -1;
+            if (exit >= 0 && exit != at) { StepTo(e, st, ref lane, cw.Lanes[at + (exit > at ? 1 : -1)], "changing over to exit"); return; }
             // The corridor line is a lane or more away (fire engine in the kerb lane, a vehicle coming from an outer
             // lane): one real lane change towards it, the cars there out of the way first, instead of crossing the
             // queue sideways. Not close to the junction, where its connection is chosen (RetargetJunction).
-            if (at >= 0 && !cw.TwoWay && math.abs(target) > 0.75f * cw.Width[at] && RemainingDistance(lane) > RetargetDistance)
+            if (at >= 0 && exit < 0 && !cw.TwoWay && math.abs(target) > 0.75f * cw.Width[at] && RemainingDistance(lane) > RetargetDistance)
             {
                 int next = at + (target < 0f ? -1 : 1);
-                if (next >= 0 && next < cw.Lanes.Length) { StepTo(e, st, ref lane, cw.Lanes[next], "fährt zur Rettungsgasse"); return; }
+                if (next >= 0 && next < cw.Lanes.Length) { StepTo(e, st, ref lane, cw.Lanes[next], "moving into corridor"); return; }
             }
             SetLateral(e, ref lane, target, slide: Speed(e) < 1.5f);
             if (RemainingDistance(lane) < RetargetDistance) RetargetJunction(e, st, lane);
@@ -95,7 +102,7 @@ namespace RealisticEMS
             }
 
             if (best != Entity.Null) first.m_Lane = best;
-            else Mod.log.Info($"Einsatzfahrzeug {e.Index}: fährt bis zum Ende der Gasse, biegt von Spur {lane.m_Lane.Index} quer ab");
+            else Log.Debug($"vehicle={e.Index} reached end of corridor, turning across from lane={lane.m_Lane.Index}");
             first.m_Flags |= CarLaneFlags.FixedLane;
             nav[0] = first;
             if (bestTarget != Entity.Null)
@@ -107,6 +114,47 @@ namespace RealisticEMS
                 st.Pinned.Add(bestTarget);
             }
             st.Retargeted = first.m_Lane;
+        }
+
+        // ponytail: 250 m covers ~3 lane changes at gap speed; longer if wide highways still miss exits.
+        private const float ExitPrepDistance = 250f;
+
+        /// <summary>
+        /// Index in cw.Lanes of the lane nearest <paramref name="at"/> whose end connects (through the route's next
+        /// junction) onto the route's next road; -1 when the route ahead is unknown or no lane of the carriageway does.
+        /// </summary>
+        private int ExitLane(Entity e, CarCurrentLane lane, Cw cw, int at)
+        {
+            var em = EntityManager;
+            if (!em.HasBuffer<CarNavigationLane>(e)) return -1;
+            var nav = em.GetBuffer<CarNavigationLane>(e, true);
+            int i = 0;
+            while (i < nav.Length && !IsNodeLane(nav[i].m_Lane)) i++;
+            if (i + 1 >= nav.Length || !em.HasComponent<Owner>(nav[i + 1].m_Lane)) return -1;
+            var node = em.GetComponentData<Owner>(nav[i].m_Lane).m_Owner;
+            var next = em.GetComponentData<Owner>(nav[i + 1].m_Lane).m_Owner;
+            int best = -1;
+            for (int k = 0; k < cw.Lanes.Length; k++)
+                if ((best < 0 || math.abs(k - at) < math.abs(best - at)) && Reaches(cw.Lanes[k], node, next)) best = k;
+            return best;
+        }
+
+        /// <summary>A drivable connection in <paramref name="node"/> from the end of <paramref name="from"/> onto <paramref name="next"/>.</summary>
+        private bool Reaches(Entity from, Entity node, Entity next)
+        {
+            var em = EntityManager;
+            if (!em.HasComponent<Lane>(from) || !em.HasBuffer<SubLane>(node)) return false;
+            var end = em.GetComponentData<Lane>(from).m_EndNode;
+            foreach (var sl in em.GetBuffer<SubLane>(node, true))
+            {
+                var c = sl.m_SubLane;
+                if (!em.HasComponent<CarLane>(c) || !em.HasComponent<Lane>(c)) continue;
+                var cLane = em.GetComponentData<Lane>(c);
+                if (!cLane.m_StartNode.EqualsIgnoreCurvePos(end)) continue;
+                if ((em.GetComponentData<CarLane>(c).m_Flags & (Game.Net.CarLaneFlags.UTurnLeft | Game.Net.CarLaneFlags.UTurnRight | Game.Net.CarLaneFlags.Forbidden)) != 0) continue;
+                if (LaneStartingAt(next, cLane.m_EndNode) != Entity.Null) return true;
+            }
+            return false;
         }
 
         /// <summary>The car lane of <paramref name="owner"/> (road or junction) that starts at <paramref name="at"/>.</summary>

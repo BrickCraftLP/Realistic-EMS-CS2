@@ -519,9 +519,9 @@ namespace RealisticEMS
             m_VisitedSum += m_Visited;
             if (++m_StatFrames < 3600) return;
             if (m_ActiveCws.Count > 0 || m_MsMax > 1.0)
-                Mod.log.Info($"Rettungsgasse Leistung: {m_MsSum / m_StatFrames:F3} ms/Frame (max {m_MsMax:F2}), {m_ActiveCws.Count} offene Fahrbahn(en), " +
-                             $"Ø {m_VisitedSum / m_StatFrames} Autos/Frame bearbeitet, {m_ShiftedAt.Count} in Gassen, {m_Hidden.Count} ausgeblendet, " +
-                             $"{m_ReListed} wieder gelistet, {m_HighwayEdges.Count} Autobahn-Abschnitte");
+                Log.Trace($"corridor perf ms_per_frame={m_MsSum / m_StatFrames:F3} ms_max={m_MsMax:F2} active_carriageways={m_ActiveCws.Count} " +
+                             $"cars_per_frame={m_VisitedSum / m_StatFrames} shifted={m_ShiftedAt.Count} hidden={m_Hidden.Count} " +
+                             $"relisted={m_ReListed} highway_edges={m_HighwayEdges.Count}");
             m_MsSum = m_MsMax = 0; m_VisitedSum = 0; m_StatFrames = 0; m_ReListed = 0;
         }
 

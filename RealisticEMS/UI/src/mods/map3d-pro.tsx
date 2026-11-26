@@ -6,12 +6,42 @@ import { Cam, camera } from "./map3d";
 
 // Experimental "3D Beta" map (Setting.EnableMap3dPro). Data from Map3dProSystem.cs; the classic map3d.tsx is untouched.
 // The game UI has no WebGL, so this is a Canvas 2D low-poly renderer: painter-sorted flat-shaded shapes, Apple-Maps palette.
-interface M3d { b?: number[]; t?: number[]; r?: number[]; w?: string; g?: string; }
-const data$ = bindValue<M3d>("realisticEMS", "m3d", {});
+// Layers arrive as separate strings (one per frame from C#): b/t/r = base64 int16, w/g = 512² char fields.
+const b$ = bindValue<string>("realisticEMS", "m3dB", ""), t$ = bindValue<string>("realisticEMS", "m3dT", ""), r$ = bindValue<string>("realisticEMS", "m3dR", "");
+const w$ = bindValue<string>("realisticEMS", "m3dW", ""), g$ = bindValue<string>("realisticEMS", "m3dG", "");
 const status$ = bindValue<number>("realisticEMS", "m3dStatus", 0); // 0 closed, 1 waiting for framerate headroom, 2 building, 3 ready
 const live$ = bindValue<boolean>("realisticEMS", "m3dLive", false); // true = animating is free (sim paused / headroom)
 const state$ = bindValue<any>("realisticEMS", "state", null);
 
+// base64 -> Int16Array (little-endian, matches C# Buffer.BlockCopy).
+const B64 = new Uint8Array(128);
+"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".split("").forEach((c, i) => { B64[c.charCodeAt(0)] = i; });
+const unpack = (s: string) => {
+    let n = s.length;
+    while (n && s[n - 1] === "=") n--;
+    const out = new Uint8Array((n * 3) >> 2);
+    for (let i = 0, j = 0; i < n; i += 4) {
+        const v = (B64[s.charCodeAt(i)] << 18) | (B64[s.charCodeAt(i + 1)] << 12) | ((B64[s.charCodeAt(i + 2)] | 0) << 6) | (B64[s.charCodeAt(i + 3)] | 0);
+        if (j < out.length) out[j++] = v >> 16;
+        if (j < out.length) out[j++] = (v >> 8) & 255;
+        if (j < out.length) out[j++] = v & 255;
+    }
+    return new Int16Array(out.buffer, 0, out.length >> 1);
+};
+
+// Session cache outside React: decoded + precomputed layers survive closing the map, so reopening draws instantly.
+// A layer is only recomputed when C# sends a different string for it ("" = nothing yet, keep what we have).
+const memo = new Map<string, { src: string; val: any }>();
+const cached = <T,>(key: string, src: string, make: (s: string) => T): T | undefined => {
+    const m = memo.get(key);
+    if (!src || m?.src === src) return m?.val;
+    const val = make(src);
+    memo.set(key, { src, val });
+    return val;
+};
+const NONE = new Int16Array(0);
+
+const BATCH = 300;
 const W = 1600, H = 900, F = 1100, RAD = Math.PI / 180;
 const N = 512, MIN = -7168, CELL = 14336 / N; // ground fields, see Map3dProSystem.WaterN
 
@@ -26,7 +56,7 @@ const STATUS: Record<string, string> = { frei: "#2E7D32", Anfahrt: "#D32F2F", "a
 const SUN_X = 0.53, SUN_Z = 0.85, SHADOW = 0.55; // shadows fall away from the south-west light
 
 /** Marching squares over a char field ('0'..'9'): filled polygons (world x,z pairs) + boundary segments. Full cells merge into row runs. */
-const contour = (f: string | undefined, th: number) => {
+const contour = (f: string, th: number) => {
     const polys: number[][] = [], edges: number[] = [];
     if (!f || f.length !== N * N) return { polys, edges };
     const v = (x: number, z: number) => f.charCodeAt(z * N + x) - 48;
@@ -61,7 +91,7 @@ const contour = (f: string | undefined, th: number) => {
 
 interface Road { pts: number[]; w: number; e: number; }
 const SEG = 8;
-const roadsOf = (r: number[] = []): Road[] => {
+const roadsOf = (r: ArrayLike<number>): Road[] => {
     const out: Road[] = [];
     for (let i = 0; i + 9 < r.length; i += 10) {
         const pts: number[] = [];
@@ -74,7 +104,7 @@ const roadsOf = (r: number[] = []): Road[] => {
     return out.sort((a, b) => a.e - b.e);
 };
 
-const home = (r: number[] = []): Cam => {
+const home = (r: ArrayLike<number>): Cam => {
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (let i = 0; i + 9 < r.length; i += 10) for (const k of [0, 6]) { x0 = Math.min(x0, r[i + k]); x1 = Math.max(x1, r[i + k]); z0 = Math.min(z0, r[i + k + 1]); z1 = Math.max(z1, r[i + k + 1]); }
     if (!isFinite(x0)) return { tx: 0, tz: 0, yaw: 0, pitch: 55, dist: 2000 };
@@ -88,38 +118,42 @@ interface Veh { x0: number; z0: number; x1: number; z1: number; t0: number; a: n
 const MOVE_MS = 500; // state arrives every 30 sim frames
 const at = (v: Veh, now: number, live: boolean) => { const t = live ? Math.min(1, (now - v.t0) / MOVE_MS) : 1; return [v.x0 + (v.x1 - v.x0) * t, v.z0 + (v.z1 - v.z0) * t] as const; };
 
-interface Scene { cam: Cam; d: M3d; s: any; layers: Record<string, boolean>; live: boolean; ground: ReturnType<typeof build>; veh: Map<number, Veh>; }
-const build = (d: M3d) => ({
-    green: contour(d.g, 0.5), water: contour(d.w, 0.5), deep: contour(d.w, 3.5), roads: roadsOf(d.r),
-});
+type Contour = ReturnType<typeof contour>;
+interface Ground { green: Contour; water: Contour; deep: Contour; roads: Road[]; }
+interface Scene { cam: Cam; b: Int16Array; t: Int16Array; s: any; layers: Record<string, boolean>; live: boolean; ground: Ground; veh: Map<number, Veh>; }
 
 const draw = (ctx: CanvasRenderingContext2D, sc: Scene, now: number) => {
-    const { cam, d, s, layers, ground, veh, live } = sc;
+    const { cam, b, t, s, layers, ground, veh, live } = sc;
     const P = camera(cam);
     const close = cam.dist < 1200;
     const vis = (q: readonly number[]) => q[2] > 1 && q[0] > -300 && q[0] < W + 300 && q[1] > -300 && q[1] < H + 300;
     const px = (m: number, depth: number) => (m * F) / depth;
+    // Gameface tessellates each canvas path natively; one path with the whole city crashed the game. Paint every BATCH subpaths.
+    // ponytail: fixed batch size; lower BATCH if very large cities still crash.
+    let sub = 0;
+    const batch = (paint: () => void) => { if (++sub >= BATCH) { paint(); ctx.beginPath(); sub = 0; } };
+    const begin = () => { ctx.beginPath(); sub = 0; };
     const poly = (pts: (readonly number[])[]) => { ctx.moveTo(pts[0][0], pts[0][1]); for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k][0], pts[k][1]); ctx.closePath(); };
 
     ctx.fillStyle = C.ground; ctx.fillRect(0, 0, W, H);
 
     // Ground fields: one path per colour, so neighbouring cells have no seams.
     const fill = (polys: number[][], color: string) => {
-        ctx.fillStyle = color; ctx.beginPath();
+        ctx.fillStyle = color; begin();
         for (const p of polys) {
             const q: (readonly number[])[] = [];
             for (let k = 0; k < p.length; k += 2) q.push(P(p[k], 0, p[k + 1]));
-            if (q.every(x => x[2] > 1) && q.some(vis)) poly(q);
+            if (q.every(x => x[2] > 1) && q.some(vis)) { poly(q); batch(() => ctx.fill()); }
         }
         ctx.fill();
     };
     fill(ground.green.polys, C.green);
     fill(ground.water.polys, C.water);
     fill(ground.deep.polys, C.deep);
-    ctx.strokeStyle = C.shore; ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.beginPath();
+    ctx.strokeStyle = C.shore; ctx.lineWidth = 2.5; ctx.lineCap = "round"; begin();
     for (let k = 0; k + 3 < ground.water.edges.length; k += 4) {
         const e = ground.water.edges, a = P(e[k], 0, e[k + 1]), b = P(e[k + 2], 0, e[k + 3]);
-        if (a[2] > 1 && b[2] > 1 && (vis(a) || vis(b))) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); }
+        if (a[2] > 1 && b[2] > 1 && (vis(a) || vis(b))) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); batch(() => ctx.stroke()); }
     }
     ctx.stroke();
 
@@ -152,25 +186,27 @@ const draw = (ctx: CanvasRenderingContext2D, sc: Scene, now: number) => {
     ground.roads.forEach((r, i) => { const q = proj[i]; if (q && r.e === 0) { stroke(q, C.asphalt, px(r.w - 1, q[SEG / 2][2])); markings(q, r.w); } });
 
     // Shadows: one translucent path (union, no double-darkening).
-    const B = layers.buildings ? d.b ?? [] : [], T = layers.trees ? d.t ?? [] : [];
+    const B = layers.buildings ? b : NONE, T = layers.trees ? t : NONE;
     const corners = (i: number) => {
         const [x, z, hw, hd, , yaw100] = B.slice(i, i + 6);
         const a = (yaw100 / 100) * RAD, fx = Math.sin(a), fz = Math.cos(a), rx = Math.cos(a), rz = -Math.sin(a);
         return [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([u, v]) => [x + rx * hw * u + fx * hd * v, z + rz * hw * u + fz * hd * v]);
     };
-    ctx.fillStyle = C.shadow; ctx.beginPath();
+    ctx.fillStyle = C.shadow; begin();
     for (let i = 0; i < B.length; i += 7) {
         if (!vis(P(B[i], 0, B[i + 1]))) continue;
         const g = corners(i), h = B[i + 4] * SHADOW, lo = g.map(([x, z]) => P(x, 0, z)), hi = g.map(([x, z]) => P(x + SUN_X * h, 0, z + SUN_Z * h));
         if (lo.concat(hi).some(p => p[2] <= 1)) continue;
         poly(lo); poly(hi);
         for (let k = 0; k < 4; k++) { const n = (k + 1) % 4; poly([lo[k], lo[n], hi[n], hi[k]]); }
+        batch(() => ctx.fill());
     }
     if (close) for (let i = 0; i < T.length; i += 4) {
         const h = T[i + 3] * SHADOW * 0.7, g = P(T[i] + SUN_X * h, 0, T[i + 1] + SUN_Z * h);
         if (!vis(g)) continue;
         const r = px(T[i + 2], g[2]);
         ctx.moveTo(g[0] + r, g[1]); ctx.arc(g[0], g[1], r, 0, Math.PI * 2);
+        batch(() => ctx.fill());
     }
     ctx.fill();
 
@@ -247,13 +283,14 @@ const draw = (ctx: CanvasRenderingContext2D, sc: Scene, now: number) => {
 
     if (!close) { // far: batch every canopy into three fills, no sorting
         for (let c = 0; c < 3; c++) {
-            ctx.fillStyle = C.canopy[c]; ctx.beginPath();
+            ctx.fillStyle = C.canopy[c]; begin();
             for (let i = 0; i < T.length; i += 4) {
                 if (hash(T[i], T[i + 1]) % 3 !== c) continue;
                 const p = P(T[i], Math.max(T[i + 2], T[i + 3] - T[i + 2]), T[i + 1]);
                 if (!vis(p)) continue;
                 const r = Math.max(0.8, px(T[i + 2], p[2]));
                 ctx.moveTo(p[0] + r, p[1]); ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
+                batch(() => ctx.fill());
             }
             ctx.fill();
         }
@@ -297,10 +334,17 @@ const draw = (ctx: CanvasRenderingContext2D, sc: Scene, now: number) => {
 
 export const Map3DPro = ({ de }: { de: boolean }) => {
     const t = (a: string, b: string) => (de ? a : b);
-    const d = useValue(data$), status = useValue(status$), live = useValue(live$), s = useValue(state$);
+    const sb = useValue(b$), stt = useValue(t$), sr = useValue(r$), sw = useValue(w$), sg = useValue(g$);
+    const status = useValue(status$), live = useValue(live$), s = useValue(state$);
     const canvas = useRef<HTMLCanvasElement>(null);
-    const ground = useMemo(() => build(d), [d]);
-    const start = useMemo(() => home(d.r), [d.r?.length ?? 0]);
+    const b = useMemo(() => cached("b", sb, unpack) ?? NONE, [sb]);
+    const tr = useMemo(() => cached("t", stt, unpack) ?? NONE, [stt]);
+    const r = useMemo(() => cached("r", sr, x => { const raw = unpack(x); return { raw, roads: roadsOf(raw) }; }) ?? { raw: NONE, roads: [] }, [sr]);
+    const wat = useMemo(() => cached("w", sw, x => ({ water: contour(x, 0.5), deep: contour(x, 3.5) })) ?? { water: contour("", 0), deep: contour("", 0) }, [sw]);
+    const green = useMemo(() => cached("g", sg, x => contour(x, 0.5)) ?? contour("", 0), [sg]);
+    const ground = useMemo<Ground>(() => ({ green, water: wat.water, deep: wat.deep, roads: r.roads }), [green, wat, r]);
+    const hasCache = b.length > 0 || r.raw.length > 0;
+    const start = useMemo(() => home(r.raw), [r.raw.length]);
     const [cam, setCam] = useState<Cam>(start);
     const [layers, setLayers] = useState({ buildings: true, trees: true, roads: true, ems: true });
     const drag = useRef<{ x: number; y: number; rotate: boolean } | null>(null);
@@ -308,10 +352,10 @@ export const Map3DPro = ({ de }: { de: boolean }) => {
     const scene = useRef<Scene | null>(null);
     const dirty = useRef(true), lastVeh = useRef(0);
 
-    scene.current = { cam, d, s, layers, live, ground, veh: veh.current };
+    scene.current = { cam, b, t: tr, s, layers, live, ground, veh: veh.current };
     useEffect(() => { trigger("realisticEMS", "m3dOpen"); return () => trigger("realisticEMS", "m3dClose"); }, []);
     useEffect(() => { setCam(start); }, [start]);
-    useEffect(() => { dirty.current = true; }, [cam, d, layers, live]);
+    useEffect(() => { dirty.current = true; }, [cam, b, tr, ground, layers, live]);
     useEffect(() => { // new vehicle snapshot: start interpolating from where each one is drawn now
         const now = performance.now(), seen = new Set<number>();
         for (const v of s?.vehicles ?? []) {
@@ -369,7 +413,12 @@ export const Map3DPro = ({ de }: { de: boolean }) => {
                             ))}
                         </div>
                     </div>
-                    {status !== 3 && (
+                    {hasCache && (status === 1 || status === 2) && (
+                        <div className={styles.hint} style={{ top: "60rem", bottom: "auto" }}>
+                            {status === 1 ? t("Aktualisierung wartet auf freie Leistung", "Update waits for spare performance") : t("Aktualisiere…", "Updating…")}
+                        </div>
+                    )}
+                    {!hasCache && status !== 3 && (
                         <div className={status === 1 ? `${pro.loader} ${pro.paused}` : pro.loader}>
                             <div className={pro.indicator}><div className={pro.shape} /></div>
                             <div className={pro.label}>{status === 1 ? t("Wartet auf freie Leistung", "Waiting for spare performance") : t("Baue 3D-Karte…", "Building 3D map…")}</div>

@@ -27,9 +27,9 @@ namespace RealisticEMS
                 File.WriteAllBytes(Path.Combine(dir, "RealisticEMS.log"), data);
                 File.WriteAllText(Path.Combine(dir, "RealisticEMS.log.sha256.json"),
                     "{\"version\":\"" + Mod.Version + "\",\"timestamp\":\"" + ts + "\",\"sha256\":\"" + sha + "\"}");
-                Mod.log.Warn("Log exported to " + dir); // Warn so it shows even with debug logging off
+                Log.Warn("Log exported to " + dir); // Warn so it shows even with debug logging off
             }
-            catch (Exception e) { Mod.log.Warn("Log export failed: " + e.Message); }
+            catch (Exception e) { Log.Warn("Log export failed: " + e.Message); }
         }
     }
 }

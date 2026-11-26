@@ -48,12 +48,12 @@ namespace RealisticEMS
             {
                 EndSqueeze(st);
                 st.Cooldown = RetryCooldown;
-                Mod.log.Info($"Einsatzfahrzeug {e.Index}: kommt nicht durch, Rettungsgasse aufgelöst");
+                Log.Debug($"vehicle={e.Index} cannot get through, corridor dissolved");
                 return;
             }
             bool was = st.InSqueeze;
             st.InSqueeze = Squeeze(e, st, ref lane, blocker);
-            if (st.InSqueeze != was) Mod.log.Info($"Einsatzfahrzeug {e.Index}: {(st.InSqueeze ? $"Gasse auf Spur {lane.m_Lane.Index}" : "Gasse beendet")}");
+            if (st.InSqueeze != was) Log.Debug($"vehicle={e.Index} {(st.InSqueeze ? $"squeeze started lane={lane.m_Lane.Index}" : "squeeze ended")}");
             if (!st.InSqueeze) EndSqueeze(st);
         }
 
@@ -68,13 +68,13 @@ namespace RealisticEMS
                 var route = st.RouteLane;
                 var back = ParallelLanes(lane).Find(p => p.lane == route);
                 if (back.lane == route && IsFree(route, back.pos, e, math.min(FreeDistance, LaneRemaining(route, back.pos))))
-                    StartChange(e, st, ref lane, route, "zurück auf Routenspur");
+                    StartChange(e, st, ref lane, route, "back to route lane");
                 else if (em.HasComponent<PathOwner>(e))
                 {
                     var po = em.GetComponentData<PathOwner>(e);
                     po.m_State |= PathFlags.Obsolete; // vanilla repaths from the current lane
                     em.SetComponentData(e, po);
-                    Mod.log.Info($"Einsatzfahrzeug {e.Index}: Routenspur besetzt, Route wird neu berechnet");
+                    Log.Debug($"vehicle={e.Index} route lane occupied, repathing");
                 }
                 st.RouteLane = Entity.Null;
             }
@@ -89,7 +89,7 @@ namespace RealisticEMS
             st.Changing = true;
             // Vanilla keeps the old lane's blocker a while after the change: wait ~1 s before the next one (no ping-pong).
             st.Blocked = -60;
-            Mod.log.Info($"Einsatzfahrzeug {e.Index}: Spurwechsel ({why})");
+            Log.Debug($"vehicle={e.Index} lane change: {why}");
         }
 
         /// <summary>
@@ -128,12 +128,12 @@ namespace RealisticEMS
             {
                 st.RouteLane = Entity.Null;
                 st.Swap = (stepLane, nodeLane, bestConnection);
-                StartChange(e, st, ref lane, stepLane, "wechselt auf freie Routenspur");
+                StartChange(e, st, ref lane, stepLane, "switching to free route lane");
             }
             else
             {
                 if (st.RouteLane == Entity.Null) st.RouteLane = lane.m_Lane;
-                StartChange(e, st, ref lane, stepLane, step == best ? "überholt auf freier Spur" : "zieht über Mittelspur");
+                StartChange(e, st, ref lane, stepLane, step == best ? "overtaking on free lane" : "crossing middle lane");
             }
         }
 
@@ -204,7 +204,7 @@ namespace RealisticEMS
                 {
                     if (!em.HasComponent<LaneSignal>(nav[k].m_Lane)) continue;
                     if (!ForcedGreen.ContainsKey(nav[k].m_Lane))
-                        Mod.log.Info($"Einsatzfahrzeug {e.Index}: Ampel für {ahead.Count} wartende(s) Fahrzeug(e) auf Grün (Spur {nav[k].m_Lane.Index})");
+                        Log.Debug($"vehicle={e.Index} forced green for waiting cars count={ahead.Count} lane={nav[k].m_Lane.Index}");
                     ForcedGreen[nav[k].m_Lane] = 300; // ~5 s at 1x
                     break;
                 }
@@ -245,7 +245,7 @@ namespace RealisticEMS
             bool truck = VehicleLength(e) > BigVehicleLength || TruckAhead(e, lane, blocker);
             if (!truck && !(speed >= 1f && OncomingClear(e, pass))) return false;
             st.Oncoming = pass;
-            Mod.log.Info($"Einsatzfahrzeug {e.Index}: {(truck ? "Lkw in der Kolonne" : "Gegenfahrbahn frei, überholt fahrende Kolonne")}, sperrt Gegenfahrbahn (Spur {oncoming.Index})");
+            Log.Debug($"vehicle={e.Index} closing oncoming lane={oncoming.Index}: {(truck ? "truck in queue" : "oncoming lane clear, overtaking moving queue")}");
             return true;
         }
 
@@ -253,7 +253,7 @@ namespace RealisticEMS
         {
             if (st.Oncoming == null) return;
             st.OncomingRetryFrame = m_Frame + (st.Oncoming.Failed ? RetryCooldown : OncomingRetryFrames);
-            if (st.Oncoming.Failed) Mod.log.Info($"Einsatzfahrzeug {e.Index}: Überholen auf der Gegenfahrbahn abgebrochen, Sperre aufgehoben");
+            if (st.Oncoming.Failed) Log.Debug($"vehicle={e.Index} oncoming overtake aborted, lane reopened");
             st.Oncoming = null; // held node cars are no longer refreshed and drive on
         }
 
@@ -271,7 +271,7 @@ namespace RealisticEMS
             CloseOncoming(p);
             if (!p.Out)
             {
-                if (OncomingClear(e, p)) { p.Out = true; p.Frames = 0; Mod.log.Info($"Einsatzfahrzeug {e.Index}: überholt auf der Gegenfahrbahn"); }
+                if (OncomingClear(e, p)) { p.Out = true; p.Frames = 0; Log.Debug($"vehicle={e.Index} overtaking on oncoming lane"); }
                 else if (p.Frames > OncomingWaitFrames) { p.Failed = true; return false; }
                 else return true;
             }
@@ -580,7 +580,7 @@ namespace RealisticEMS
                 int from = math.min(em.GetComponentData<PathOwner>(car).m_ElementIndex, path.Length);
                 path.RemoveRange(from, path.Length - from);
                 m_Rerouted[car] = (alt, 0);
-                Mod.log.Info($"Einsatzfahrzeug {e.Index}: Straße zu eng, Fahrzeug {car.Index} biegt anders ab");
+                Log.Debug($"vehicle={e.Index} road too narrow, car={car.Index} rerouted at next junction");
             }
         }
 

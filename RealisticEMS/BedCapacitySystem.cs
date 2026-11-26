@@ -49,7 +49,7 @@ namespace RealisticEMS
                 data.m_PatientCapacity = math.max(1, (int)math.round(original * percent / 100f));
                 EntityManager.SetComponentData(p, data);
             }
-            if (percent != m_Applied) Mod.log.Info($"Bettenkapazität auf {percent}% gesetzt ({m_Original.Count} Spitalstypen)");
+            if (percent != m_Applied) Log.Info($"bed capacity set percent={percent} hospital_types={m_Original.Count}");
             m_Applied = percent;
         }
     }

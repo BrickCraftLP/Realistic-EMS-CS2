@@ -182,7 +182,7 @@ function initDispatch(svg){
   return t=>{q(".fade").setAttribute("opacity",FADE(t));r.draw(EIO((t-.8)/5)*(r.L+110),t)};
 }
 
-// ---- Call volume: 3 stacked panels, call markers pop up and ping. Few halves, Many doubles vanilla calls (CallVolumeSystem).
+// ---- Call volume: 3 stacked panels, call markers pop up and ping. Few keeps 1/4, Balanced 1/2, Many all vanilla calls (CallVolumeSystem).
 const CALL_N=[4,9,18];
 const CALL_TXT={en:["Few calls","Balanced","Many calls"],de:["Wenige Einsätze","Ausgewogen","Viele Einsätze"]};
 const callPos=i=>[((i*.61803)%1)*90+5,((i*.3247+.17)%1)*70+15];

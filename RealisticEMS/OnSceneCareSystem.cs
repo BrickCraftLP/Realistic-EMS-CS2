@@ -20,9 +20,6 @@ namespace RealisticEMS
     public partial class OnSceneCareSystem : GameSystemBase
     {
         public const float FramesPerGameMinute = TimeSystem.kTicksPerDay / 1440f;
-        // Drives run at real speed (60 frames = 1 sim second) while the clock is compressed (1 game minute ~ 3 s), so travel is timed in sim minutes.
-        // ponytail: fixed 60 fps sim rate; raise/lower to calibrate how long responses read.
-        public const float DriveFramesPerMinute = 3600f;
 
         private class Care { public uint Dispatch, Arrive, NefArrive, Start, Transport; }
         private readonly Dictionary<Entity, Care> m_Care = new Dictionary<Entity, Care>(); // patient -> on-scene times
@@ -74,7 +71,7 @@ namespace RealisticEMS
                 var car = em.GetComponentData<Car>(v);
                 var flags = (car.m_Flags & ~CarFlags.Emergency) | CarFlags.Warning;
                 if (flags != car.m_Flags) { car.m_Flags = flags; em.SetComponentData(v, car); }
-                if (m_Silenced.Add(v)) Mod.log.Info($"{m_Units.CallsignOf(v)}: Sirene aus, Blaulicht an");
+                if (m_Silenced.Add(v)) Log.Debug($"unit={m_Units.CallsignOf(v)} siren off, lights on");
             }
             foreach (var v in new List<Entity>(m_Silenced))
             {
@@ -156,6 +153,7 @@ namespace RealisticEMS
                 seen.Add(p);
                 if (!m_Care.TryGetValue(p, out var c)) m_Care[p] = c = new Care { Dispatch = now };
                 if (nefInvolved && c.NefArrive == 0 && nef != Entity.Null && em.Exists(nef) && OnScene(em, nef)) c.NefArrive = now;
+                if (c.Arrive == 0 && now - c.Dispatch > EnRouteCap && em.HasComponent<Car>(rtw) && !OnScene(em, rtw)) { Recall(rtw, a); continue; }
                 if (care == 0 && !nefInvolved) continue;
                 // Held already on the way: the patient boards in the first frame AtTarget is visible.
                 if (!OnScene(em, rtw)) { held.Add(rtw); continue; }
@@ -165,7 +163,7 @@ namespace RealisticEMS
                 {
                     c.Arrive = now;
                     if (!nefInvolved) c.Start = now;
-                    Mod.log.Info($"{unit} vor Ort, {(nefInvolved ? "wartet auf NEF" : $"versorgt Patient ({Mod.Setting.OnSceneMinutes} min)")}");
+                    Log.Debug($"unit={unit} on scene, {(nefInvolved ? "waiting for doctor car" : $"treating patient minutes={Mod.Setting.OnSceneMinutes}")}");
                 }
                 else if (c.Start == 0 && !nefInvolved) c.Start = now; // NEF mission ended: start alone
                 ClearWaitIcon(p);
@@ -173,12 +171,12 @@ namespace RealisticEMS
                 {
                     bool nefOnScene = nef != Entity.Null && em.Exists(nef) && OnScene(em, nef)
                         && (!em.HasComponent<Ambulance>(nef) || (em.GetComponentData<Ambulance>(nef).m_State & (AmbulanceFlags.Transporting | AmbulanceFlags.Returning)) == 0);
-                    if (nefOnScene) { c.Start = now; Mod.log.Info($"{unit} behandelt gemeinsam mit NEF ({Mod.Setting.OnSceneMinutes} min)"); }
-                    else if (now - c.Arrive >= maxWait) { c.Start = now; Mod.log.Info($"{unit}: NEF nicht rechtzeitig da, versorgt allein"); }
+                    if (nefOnScene) { c.Start = now; Log.Debug($"unit={unit} treating with doctor car minutes={Mod.Setting.OnSceneMinutes}"); }
+                    else if (now - c.Arrive >= maxWait) { c.Start = now; Log.Debug($"unit={unit} doctor car late, treating alone"); }
                 }
 
                 bool hold = c.Start == 0 || now - c.Start < care;
-                if (hold && now - c.Arrive > cap) { hold = false; Mod.log.Warn($"{unit}: maximale Zeit vor Ort überschritten, lädt Patient ein"); }
+                if (hold && now - c.Arrive > cap) { hold = false; Log.Warn($"unit={unit} exceeded max on-scene time, loading patient"); }
                 if (hold)
                 {
                     held.Add(rtw);
@@ -186,13 +184,40 @@ namespace RealisticEMS
                     if (nefInvolved && nef != Entity.Null && em.Exists(nef) && OnScene(em, nef)) quiet.Add(nef);
                 }
                 else if (CrewHoldSystem.Held.Contains(rtw))
-                    Mod.log.Info($"{unit} lädt Patient ein ({(now - c.Arrive) / FramesPerGameMinute:0} min vor Ort)");
+                    Log.Debug($"unit={unit} loading patient on_scene_minutes={(now - c.Arrive) / FramesPerGameMinute:0}");
             }
 
             CrewHoldSystem.Held.Clear();
             CrewHoldSystem.Held.UnionWith(held);
             SilenceSirens(quiet);
             foreach (var p in new List<Entity>(m_Care.Keys)) if (!seen.Contains(p)) m_Care.Remove(p);
+        }
+
+        // ponytail: fixed 60 game min en route (4x the 15 min Hilfsfrist); make it a setting if players want it tunable.
+        private const uint EnRouteCap = (uint)(60 * FramesPerGameMinute);
+
+        /// <summary>
+        /// Stuck in traffic and never arrived: send it home (never delete a driving car) and drop its dispatch so vanilla
+        /// hands the patient's request to another unit. Disabled keeps vanilla from giving this one the same call again.
+        /// Same recall as HelicopterSystem's ordinary-call recall.
+        /// </summary>
+        private void Recall(Entity rtw, Ambulance a)
+        {
+            var em = EntityManager;
+            var owner = em.GetComponentData<Owner>(rtw).m_Owner;
+            if (!em.Exists(owner)) return;
+            Log.Warn($"unit={m_Units.CallsignOf(rtw)} en route minutes={(m_Sim.frameIndex - m_Care[a.m_TargetPatient].Dispatch) / FramesPerGameMinute:0} without arriving, sending home");
+            a.m_State = (a.m_State & ~(AmbulanceFlags.Dispatched | AmbulanceFlags.AtTarget | AmbulanceFlags.Critical)) | AmbulanceFlags.Returning | AmbulanceFlags.Disabled;
+            a.m_TargetPatient = Entity.Null;
+            a.m_TargetLocation = Entity.Null;
+            em.SetComponentData(rtw, a);
+            if (em.HasBuffer<ServiceDispatch>(rtw)) em.GetBuffer<ServiceDispatch>(rtw).Clear();
+            if (em.HasComponent<Game.Objects.TripSource>(rtw)) ResponderDispatchSystem.ReleaseVehicle(em, rtw);
+            var po = em.GetComponentData<PathOwner>(rtw);
+            var t = em.GetComponentData<Game.Common.Target>(rtw);
+            VehicleUtils.SetTarget(ref po, ref t, owner);
+            em.SetComponentData(rtw, po);
+            em.SetComponentData(rtw, t);
         }
 
         public IEnumerable<Entity> Patients => m_Care.Keys;
@@ -226,7 +251,8 @@ namespace RealisticEMS
         protected override void OnUpdate()
         {
             var em = EntityManager;
-            var now = new Dictionary<Entity, Game.Citizens.HealthProblemFlags>();
+            var now = m_Next;
+            now.Clear();
             foreach (var p in m_Care.Patients)
             {
                 if (!m_Care.Awaited(p) || !em.HasComponent<Game.Citizens.HealthProblem>(p)) continue;
@@ -236,11 +262,14 @@ namespace RealisticEMS
                 {
                     hp.m_Flags |= was & Need;
                     em.SetComponentData(p, hp);
-                    Mod.log.Info($"Patient {p.Index}: Genesung verhindert, Rettungsdienst ist unterwegs/vor Ort");
+                    Log.Debug($"patient={p.Index} recovery blocked, EMS en route or on scene");
                 }
                 if ((hp.m_Flags & Game.Citizens.HealthProblemFlags.RequireTransport) != 0) now[p] = hp.m_Flags;
             }
+            m_Next = m_Flags; // swap: no new dictionary every frame
             m_Flags = now;
         }
+
+        private Dictionary<Entity, Game.Citizens.HealthProblemFlags> m_Next = new Dictionary<Entity, Game.Citizens.HealthProblemFlags>();
     }
 }

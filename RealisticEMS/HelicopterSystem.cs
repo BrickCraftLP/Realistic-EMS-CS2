@@ -25,8 +25,10 @@ namespace RealisticEMS
     ///  - Doctor mission: sent instead of the NEF when faster, or requested on scene. Lands only on a sports field
     ///    near the call (never at the patient); a police car shuttles the doctor field -> patient -> field.
     ///  - Patient flight: when no suitable hospital is reachable by road fast enough (island, clinic without trauma
-    ///    care, long drive), the ambulance brings the patient to the field and hands over; the heli flies to a trauma
-    ///    hospital. That ambulance stays unavailable until back at its base (overrides AvailableOnlyAtDepot).
+    ///    care, long drive or heavy traffic), the ambulance brings the patient to the field and hands over; the heli flies to a trauma
+    ///    hospital. That ambulance is available again one game minute after the heli lifts off.
+    ///  - Landing sites: flat parks with no trees/props within 10 m of the centre; sports fields preferred.
+    ///  - Vanilla medical helis never take ordinary calls (also with this feature off), see RecallVanillaHelis.
     ///  - Clinic transfer: a small hospital without road access to a trauma hospital flies out critical patients,
     ///    or one patient when it is full.
     /// Vehicles waiting at a field are held with the TripSource timer (vanilla AI skips them), see ResponderDispatchSystem.
@@ -54,7 +56,8 @@ namespace RealisticEMS
         private readonly List<(Entity site, float3 pos)> m_Sites = new List<(Entity, float3)>();
         private uint m_SitesAt = uint.MaxValue;
 
-        private EntityQuery m_Ambulances, m_Hospitals, m_HeliBases, m_MedHelis, m_Parks, m_HeliPrefabs, m_NetChanges;
+        private EntityQuery m_Ambulances, m_Hospitals, m_HeliBases, m_MedHelis, m_Parks, m_HeliPrefabs, m_NetChanges, m_Clutter;
+        private TerrainSystem m_Terrain;
         private int m_BasesSeen; // hospitals with any helicopter slot, from the last NearestHeliBase (debug message)
         private PrefabSystem m_Prefabs;
         private SimulationSystem m_Sim;
@@ -122,6 +125,14 @@ namespace RealisticEMS
                 ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
             m_HeliPrefabs = GetEntityQuery(ComponentType.ReadOnly<AmbulanceData>(), ComponentType.ReadOnly<HelicopterData>(), ComponentType.ReadOnly<ObjectData>(),
                 ComponentType.ReadOnly<PrefabData>(), ComponentType.Exclude<Locked>());
+            m_Terrain = World.GetOrCreateSystemManaged<TerrainSystem>();
+            // Trees and static props (benches, lamps, goals...) block a landing spot; buildings do not (the park itself).
+            m_Clutter = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[] { ComponentType.ReadOnly<Transform>() },
+                Any = new[] { ComponentType.ReadOnly<Tree>(), ComponentType.ReadOnly<Static>() },
+                None = new[] { ComponentType.ReadOnly<Building>(), ComponentType.ReadOnly<Deleted>(), ComponentType.ReadOnly<Temp>() },
+            });
             m_NetChanges = GetEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadOnly<Game.Net.Edge>() },
@@ -134,17 +145,20 @@ namespace RealisticEMS
             base.OnGamePreload(purpose, mode);
             m_Missions.Clear(); m_Decided.Clear(); m_Rolled.Clear(); m_Handover.Clear(); m_NoRoute.Clear(); m_Reach.Clear(); m_Sites.Clear();
             m_SitesAt = uint.MaxValue;
-            m_LoggedBases.Clear();
+            m_LoggedBases.Clear(); m_FreeAt.Clear(); m_Recalled.Clear();
+            m_Restore = true;
             HeliByPatient.Clear(); ShuttleByPatient.Clear();
             HeliPatients.Clear(); DoctorByPatient.Clear(); HandedOver.Clear();
         }
 
         protected override void OnUpdate()
         {
+            uint now = m_Sim.frameIndex;
+            if (m_Restore) { m_Restore = false; RedirectOrphanedHandovers(); }
+            if (now % 16 == 0) RecallVanillaHelis();
             if (!Mod.Setting.EnableHelicopter) { HeliByPatient.Clear(); ShuttleByPatient.Clear(); return; }
             StartNoRouteHandovers();
             HoldArrivingHandovers(); // every frame
-            uint now = m_Sim.frameIndex;
             if (now % 16 != 0) return;
             if (!m_NetChanges.IsEmptyIgnoreFilter) m_Reach.Clear();
             if (m_SitesAt == uint.MaxValue || now - m_SitesAt > 4096) RefreshSites(now);
@@ -199,19 +213,78 @@ namespace RealisticEMS
         }
 
         private readonly HashSet<string> m_LoggedNames = new HashSet<string>();
+        private readonly HashSet<Entity> m_Plain = new HashSet<Entity>(); // landing sites that are plain parks (open grass), not sports fields
 
+        // ponytail: fixed landing-zone size; a CS2 medical heli needs roughly a 25-30 m circle.
+        private const float ClearRadius = 10f, MaxSlope = 1.5f, Cell = 64f;
+
+        /// <summary>Flat enough to land: highest minus lowest terrain sample within MaxSlope metres.</summary>
+        public static bool IsFlat(float[] heights)
+        {
+            float lo = float.MaxValue, hi = float.MinValue;
+            foreach (var h in heights) { lo = math.min(lo, h); hi = math.max(hi, h); }
+            return hi - lo <= MaxSlope;
+        }
+
+        private static int2 CellOf(float3 p) => (int2)math.floor(p.xz / Cell);
+
+        /// <summary>
+        /// Parks whose centre is flat and free of trees and props. Sports fields first; plain parks (open grass)
+        /// count too, ranked behind. Runs every 4096 frames: objects only change when the player builds.
+        /// </summary>
+        // ponytail: one pass over all trees/static props bucketed by a 64 m grid, O(objects + sites).
+        // Cars parked on the field are not checked.
         private void RefreshSites(uint now)
         {
             m_SitesAt = now;
-            m_Sites.Clear();
+            m_Sites.Clear(); m_Plain.Clear();
             var em = EntityManager;
-            using var parks = m_Parks.ToEntityArray(Allocator.Temp);
-            foreach (var p in parks)
+            var heights = m_Terrain.GetHeightData();
+            var candidates = new List<(Entity site, float3 pos, bool sports)>();
+            var grid = new Dictionary<int2, List<int>>();
+            using (var parks = m_Parks.ToEntityArray(Allocator.Temp))
+                foreach (var p in parks)
+                {
+                    var pos = em.GetComponentData<Transform>(p).m_Position;
+                    var samples = new float[5];
+                    int k = 0;
+                    foreach (var off in new[] { float2.zero, new float2(ClearRadius, 0), new float2(-ClearRadius, 0), new float2(0, ClearRadius), new float2(0, -ClearRadius) })
+                        samples[k++] = TerrainUtils.SampleHeight(ref heights, pos + new float3(off.x, 0, off.y));
+                    if (!IsFlat(samples)) continue;
+                    bool sports = m_Prefabs.TryGetPrefab(em.GetComponentData<PrefabRef>(p).m_Prefab, out PrefabBase prefab) && IsLandingName(prefab.name);
+                    var c = CellOf(pos);
+                    if (!grid.TryGetValue(c, out var list)) grid[c] = list = new List<int>();
+                    list.Add(candidates.Count);
+                    candidates.Add((p, pos, sports));
+                }
+            if (candidates.Count == 0) return;
+
+            var blocked = new bool[candidates.Count];
+            using (var objects = m_Clutter.ToComponentDataArray<Transform>(Allocator.Temp))
+            using (var entities = m_Clutter.ToEntityArray(Allocator.Temp))
+                for (int o = 0; o < objects.Length; o++)
+                {
+                    var t = objects[o];
+                    // A sports field's own fittings (goals, line decals) belong to it; its trees still block.
+                    var owner = em.HasComponent<Owner>(entities[o]) && !em.HasComponent<Tree>(entities[o]) ? em.GetComponentData<Owner>(entities[o]).m_Owner : Entity.Null;
+                    var c = CellOf(t.m_Position);
+                    for (int dx = -1; dx <= 1; dx++)
+                        for (int dz = -1; dz <= 1; dz++)
+                        {
+                            if (!grid.TryGetValue(c + new int2(dx, dz), out var list)) continue;
+                            foreach (var i in list)
+                                if (!blocked[i] && !(candidates[i].sports && owner == candidates[i].site) && math.distancesq(t.m_Position.xz, candidates[i].pos.xz) < ClearRadius * ClearRadius) blocked[i] = true;
+                        }
+                }
+
+            for (int i = 0; i < candidates.Count; i++)
             {
-                if (!m_Prefabs.TryGetPrefab(em.GetComponentData<PrefabRef>(p).m_Prefab, out PrefabBase prefab) || !IsLandingName(prefab.name)) continue;
-                m_Sites.Add((p, em.GetComponentData<Transform>(p).m_Position));
-                if (m_LoggedNames.Add(prefab.name)) Mod.log.Info($"RTH: Landeplatz-Typ {prefab.name}");
+                if (blocked[i]) continue;
+                var (site, pos, sports) = candidates[i];
+                m_Sites.Add((site, pos));
+                if (!sports) m_Plain.Add(site);
             }
+            Log.Debug($"landing sites: {m_Sites.Count} usable ({m_Plain.Count} open grass) of {candidates.Count} flat parks");
         }
 
         private Entity NearestFreeSite(float3 at)
@@ -220,7 +293,7 @@ namespace RealisticEMS
             foreach (var (site, pos) in m_Sites)
             {
                 if (!EntityManager.Exists(site) || SiteTaken(site)) continue;
-                float d = math.distance(at.xz, pos.xz);
+                float d = math.distance(at.xz, pos.xz) + (m_Plain.Contains(site) ? 300f : 0f); // sports fields preferred
                 if (d < bestDist) { bestDist = d; best = site; }
             }
             return best;
@@ -304,6 +377,9 @@ namespace RealisticEMS
                     var o = em.GetComponentData<Owner>(v).m_Owner;
                     if (!em.Exists(o) || !em.HasComponent<Transform>(o) || !em.HasComponent<PrefabRef>(o)) continue;
                     owned[o] = (owned.TryGetValue(o, out var n) ? n : 0) + 1;
+                    // Still flying (e.g. home from a vanilla call): vanilla counts it against the base's capacity and
+                    // disables any extra spawn at once, which looped (spawn, disabled, back, spawn again).
+                    if (!em.HasComponent<Game.Vehicles.ParkedCar>(v)) busy[o] = (busy.TryGetValue(o, out var b) ? b : 0) + 1;
                     LogBaseOnce(o);
                 }
             // All Hospital buildings, not only those with beds: a helicopter base may have none.
@@ -331,7 +407,7 @@ namespace RealisticEMS
             if (!m_LoggedBases.Add(b)) return;
             var em = EntityManager;
             string name = m_Prefabs.TryGetPrefab(em.GetComponentData<PrefabRef>(b).m_Prefab, out PrefabBase p) ? p.name : "?";
-            Mod.log.Info($"RTH-Basis erkannt: Gebäude {b.Index} ({name}), Hospital={em.HasComponent<Hospital>(b)}, Helikopter laut Daten={StationFleetSystem.HeliSlots(em, b)}");
+            Log.Debug($"helicopter base found building={b.Index} prefab={name} is_hospital={em.HasComponent<Hospital>(b)} heli_slots={StationFleetSystem.HeliSlots(em, b)}");
         }
 
         private float3 Pos(Entity e) => EntityManager.GetComponentData<Transform>(e).m_Position;
@@ -365,7 +441,7 @@ namespace RealisticEMS
             m_Missions[heliEntity] = new Mission { Kind = Kind.Scene, Base = heliBase, Site = site, Patient = patient, Location = location, Police = police, Since = m_Sim.frameIndex };
             HeliPatients.Add(patient);
             DoctorByPatient[patient] = Entity.Null; // requested; the crew waits for the doctor like for an NEF
-            Mod.log.Info($"RTH {heliEntity.Index} alarmiert von Spital {heliBase.Index}, Landeplatz {site.Index}, Patient {patient.Index}: {why}");
+            Log.Debug($"heli={heliEntity.Index} dispatched base={heliBase.Index} site={site.Index} patient={patient.Index}: {why}");
             return true;
         }
 
@@ -388,7 +464,7 @@ namespace RealisticEMS
         {
             var em = EntityManager;
             using var prefabs = m_HeliPrefabs.ToEntityArray(Allocator.Temp);
-            if (prefabs.Length == 0) { Mod.log.Warn("RTH: kein Rettungshelikopter-Prefab freigeschaltet"); return Entity.Null; }
+            if (prefabs.Length == 0) { Log.Warn("no medical helicopter prefab unlocked"); return Entity.Null; }
             // ponytail: first unlocked prefab, ignoring city theme (same as police in ResponderDispatchSystem).
             var prefab = prefabs[0];
             using var created = new NativeArray<Entity>(1, Allocator.Temp); // array overload, see NefDispatchSystem.Spawn
@@ -422,9 +498,9 @@ namespace RealisticEMS
                 // NEFs off: the heli covers doctor codes and on-scene requests itself.
                 if (!Mod.Setting.EnableNef && !HeliPatients.Contains(p))
                 {
-                    if (code.Nef > 0 && m_Rolled.Add(p)) TryDispatchDoctor(p, a.m_TargetLocation, $"Code {code} verlangt Notarzt");
+                    if (code.Nef > 0 && m_Rolled.Add(p)) TryDispatchDoctor(p, a.m_TargetLocation, $"code {code} requires doctor");
                     else if (OnSceneCareSystem.OnScene(em, v) && m_Rolled.Add(p) && m_Random.NextFloat() < NefDispatchSystem.CallInChance(code.Level))
-                        TryDispatchDoctor(p, a.m_TargetLocation, $"{m_Units.CallsignOf(v)} fordert RTH nach ({code})");
+                        TryDispatchDoctor(p, a.m_TargetLocation, $"{m_Units.CallsignOf(v)} requested heli (code {code})");
                 }
 
                 // Transport decision, once the vanilla hospital path is known.
@@ -444,13 +520,20 @@ namespace RealisticEMS
             if (dest == Entity.Null || dest == hospital) return false;
             using var hospitals = m_Hospitals.ToEntityArray(Allocator.Temp);
             bool critical = code.Level >= AmpdsLevel.Delta;
-            if (critical && TierOf(hospital, MaxCapacity(hospitals)) == Tier.Clinic) { why = "Klinik ohne Schockraum, kritischer Patient"; return true; }
-            // ponytail: PathInformation is vanilla's route to the chosen hospital; straight line for the flight.
-            float ground = em.HasComponent<PathInformation>(rtw) ? em.GetComponentData<PathInformation>(rtw).m_Distance / CarSpeed : float.MaxValue;
+            if (critical && TierOf(hospital, MaxCapacity(hospitals)) == Tier.Clinic) { why = "critical patient, clinic has no trauma bay"; return true; }
+            // ponytail: PathInformation is vanilla's route to the chosen hospital (m_Duration includes congestion,
+            // distance is the floor if it is unset); straight line for the flight.
+            float ground = float.MaxValue;
+            if (em.HasComponent<PathInformation>(rtw))
+            {
+                var pi = em.GetComponentData<PathInformation>(rtw);
+                ground = math.max(pi.m_Duration, pi.m_Distance / CarSpeed);
+            }
+            if (code.Level < AmpdsLevel.Charlie) return false;
             var site = NearestFreeSite(at);
             if (site == Entity.Null) return false;
             float flight = math.distance(at.xz, Pos(site).xz) * RoadFactor / CarSpeed + math.distance(Pos(site), Pos(dest)) / HeliSpeed;
-            if (critical && ground > 1.5f * flight) { why = $"Bodentransport zu langsam ({ground:0}s vs. {flight:0}s)"; return true; }
+            if (ground > (critical ? 1.5f : 2.5f) * flight) { why = $"ground transport too slow (distance/traffic) ground={ground:0}s flight={flight:0}s"; return true; }
             return false;
         }
 
@@ -483,7 +566,7 @@ namespace RealisticEMS
                 if (!em.Exists(rtw) || em.HasComponent<Deleted>(rtw)) continue;
                 var a = em.GetComponentData<Ambulance>(rtw);
                 var dest = NearestTrauma(Pos(rtw));
-                if (dest == Entity.Null || !StartHandover(rtw, kv.Value, a.m_TargetLocation, dest, "keine Strassenverbindung zu einem Spital")) continue;
+                if (dest == Entity.Null || !StartHandover(rtw, kv.Value, a.m_TargetLocation, dest, "no road connection to any hospital")) continue;
                 // Back to a plain transport: it was Returning|Transporting (hospital search failed).
                 a = em.GetComponentData<Ambulance>(rtw);
                 a.m_State &= ~AmbulanceFlags.Returning;
@@ -507,12 +590,12 @@ namespace RealisticEMS
                 if (heli == Entity.Null) return false;
                 mission = new Mission { Kind = Kind.Scene, Base = heliBase, Site = site, Patient = patient, Location = location, Since = m_Sim.frameIndex };
                 m_Missions[heli] = mission;
-                Mod.log.Info($"RTH {heli.Index} alarmiert von Spital {heliBase.Index} für Patientenflug, Landeplatz {site.Index}");
+                Log.Debug($"heli={heli.Index} dispatched for patient flight base={heliBase.Index} site={site.Index}");
             }
             mission.Carry = true; mission.Rtw = rtw; mission.Dest = dest;
             m_Handover[rtw] = heli;
             Retarget(rtw, mission.Site);
-            Mod.log.Info($"{m_Units.CallsignOf(rtw)} bringt Patient {patient.Index} zum RTH (Landeplatz {mission.Site.Index}): {why}");
+            Log.Debug($"unit={m_Units.CallsignOf(rtw)} bringing patient={patient.Index} to heli site={mission.Site.Index}: {why}");
             return true;
         }
 
@@ -535,8 +618,8 @@ namespace RealisticEMS
         private void UpdateMission(Entity heli, Mission m, uint now)
         {
             var em = EntityManager;
-            if (!em.Exists(heli) || em.HasComponent<Deleted>(heli)) { End(heli, m, "Fahrzeug weg"); return; }
-            if (m.Phase != Phase.Home && now - m.Since > Cap()) { SendHome(heli, m, "Zeitüberschreitung"); return; }
+            if (!em.Exists(heli) || em.HasComponent<Deleted>(heli)) { End(heli, m, "vehicle gone"); return; }
+            if (m.Phase != Phase.Home && now - m.Since > Cap()) { SendHome(heli, m, "timeout"); return; }
             var a = em.GetComponentData<Ambulance>(heli);
 
             switch (m.Phase)
@@ -547,7 +630,7 @@ namespace RealisticEMS
                     ResponderDispatchSystem.HoldVehicle(em, heli, Cap());
                     if (m.Kind == Kind.Scene) Land(heli, m.Site);
                     m.Phase = Phase.OnSite; m.OnSiteSince = now;
-                    Mod.log.Info($"RTH {heli.Index}: gelandet bei {target.Index}");
+                    Log.Debug($"heli={heli.Index} landed at={target.Index}");
                     break;
 
                 case Phase.OnSite:
@@ -562,7 +645,7 @@ namespace RealisticEMS
                     bool doctorDone = m.Police == Entity.Null || m.DoctorBack;
                     if (!doctorDone || !patientDone) break;
                     if (m.Carry && a.m_TargetPatient != Entity.Null) Fly(heli, m, m.Dest);
-                    else if (!m.Carry || !em.Exists(m.Patient)) SendHome(heli, m, "Einsatz beendet");
+                    else if (!m.Carry || !em.Exists(m.Patient)) SendHome(heli, m, "mission over");
                     break;
 
                 case Phase.Flying:
@@ -575,7 +658,7 @@ namespace RealisticEMS
                 case Phase.Home:
                     a.m_State |= AmbulanceFlags.Disabled; // never a regular ambulance on the way back
                     em.SetComponentData(heli, a);
-                    if (em.HasComponent<ParkedCar>(heli) || Arrived(heli, m.Base, out _)) { em.AddComponent<Deleted>(heli); End(heli, m, "zurück an der Basis"); }
+                    if (em.HasComponent<ParkedCar>(heli) || Arrived(heli, m.Base, out _)) { em.AddComponent<Deleted>(heli); End(heli, m, "back at base"); }
                     break;
             }
         }
@@ -596,7 +679,7 @@ namespace RealisticEMS
                 Retarget(car, m.Location);
                 DoctorByPatient[m.Patient] = car;
                 m.DoctorOut = true;
-                Mod.log.Info($"Polizei {car.Index}: holt Notarzt am Landeplatz ab, fährt zu Patient {m.Patient.Index}");
+                Log.Debug($"police={car.Index} picked up doctor at site, driving to patient={m.Patient.Index}");
                 return;
             }
             bool atPatient = em.Exists(m.Location) && Arrived(car, m.Location, out _);
@@ -610,14 +693,14 @@ namespace RealisticEMS
                 if (em.HasComponent<TripSource>(car)) ResponderDispatchSystem.ReleaseVehicle(em, car);
                 DoctorByPatient.Remove(m.Patient);
                 Retarget(car, m.Site);
-                Mod.log.Info($"Polizei {car.Index}: bringt Notarzt zurück zum RTH");
+                Log.Debug($"police={car.Index} driving doctor back to heli");
                 return;
             }
             if (!Arrived(car, m.Site, out _)) return;
             m.DoctorBack = true;
             SendPoliceHome(car);
             m.Police = Entity.Null;
-            Mod.log.Info($"Notarzt zurück am RTH {m.Site.Index}");
+            Log.Debug($"doctor back at heli site={m.Site.Index}");
         }
 
         /// <summary>Ambulance held at the field next to the heli: move the patient over and send the ambulance home.</summary>
@@ -656,7 +739,7 @@ namespace RealisticEMS
             Retarget(rtw, em.GetComponentData<Owner>(rtw).m_Owner);
             m_Handover.Remove(rtw);
             HandedOver.Add(rtw);
-            Mod.log.Info($"{m_Units.CallsignOf(rtw)}: Patient {m.Patient.Index} an RTH {heli.Index} übergeben, rückt ein");
+            Log.Debug($"unit={m_Units.CallsignOf(rtw)} handed patient={m.Patient.Index} to heli={heli.Index}, returning");
             return true;
         }
 
@@ -669,7 +752,8 @@ namespace RealisticEMS
             ResponderDispatchSystem.ReleaseVehicle(em, heli);
             Retarget(heli, dest);
             m.Phase = Phase.Flying;
-            Mod.log.Info($"RTH {heli.Index}: fliegt {(m.Kind == Kind.Transfer ? "Verlegung" : $"Patient {m.Patient.Index}")} ins Spital {dest.Index}");
+            if (m.Rtw != Entity.Null && HandedOver.Contains(m.Rtw)) m_FreeAt[m.Rtw] = m_Sim.frameIndex + (uint)OnSceneCareSystem.FramesPerGameMinute;
+            Log.Debug($"heli={heli.Index} flying {(m.Kind == Kind.Transfer ? "transfer" : $"patient={m.Patient.Index}")} to hospital={dest.Index}");
         }
 
         private void SendHome(Entity heli, Mission m, string why)
@@ -689,7 +773,7 @@ namespace RealisticEMS
             if (em.HasComponent<TripSource>(heli)) ResponderDispatchSystem.ReleaseVehicle(em, heli);
             Retarget(heli, m.Base);
             m.Phase = Phase.Home;
-            Mod.log.Info($"RTH {heli.Index}: rückt ein ({why})");
+            Log.Debug($"heli={heli.Index} returning: {why}");
         }
 
         private void End(Entity heli, Mission m, string why)
@@ -697,25 +781,94 @@ namespace RealisticEMS
             m_Missions.Remove(heli);
             HeliPatients.Remove(m.Patient);
             DoctorByPatient.Remove(m.Patient);
-            Mod.log.Info($"RTH {heli.Index}: Einsatz Ende ({why})");
+            Log.Debug($"heli={heli.Index} mission ended: {why}");
         }
 
         private void SendPoliceHome(Entity car)
         {
             var em = EntityManager;
+            if (!em.Exists(car) || em.HasComponent<Deleted>(car)) return;
+            // Station gone (bulldozed) or car broken: leave it to vanilla. Never Deleted on the road (native crash).
+            var owner = em.HasComponent<Owner>(car) ? em.GetComponentData<Owner>(car).m_Owner : Entity.Null;
+            if (!em.HasComponent<Game.Vehicles.PoliceCar>(car) || !em.HasComponent<Car>(car) || !em.Exists(owner) || em.HasComponent<Deleted>(owner)) return;
             var p = em.GetComponentData<Game.Vehicles.PoliceCar>(car);
             p.m_State |= PoliceCarFlags.Returning;
             em.SetComponentData(car, p);
             var c = em.GetComponentData<Car>(car);
             c.m_Flags &= ~CarFlags.Emergency;
             em.SetComponentData(car, c);
-            Retarget(car, em.GetComponentData<Owner>(car).m_Owner);
+            Retarget(car, owner);
         }
 
         private void CleanupHandedOver()
         {
             var em = EntityManager;
             HandedOver.RemoveWhere(e => !em.Exists(e) || em.HasComponent<Deleted>(e) || em.HasComponent<ParkedCar>(e));
+            // Crew available again shortly after the heli has left with their patient.
+            foreach (var kv in new List<KeyValuePair<Entity, uint>>(m_FreeAt))
+            {
+                if (m_Sim.frameIndex < kv.Value) continue;
+                m_FreeAt.Remove(kv.Key);
+                if (!HandedOver.Remove(kv.Key) || !em.Exists(kv.Key) || Mod.Setting.AvailableOnlyAtDepot) continue;
+                var a = em.GetComponentData<Ambulance>(kv.Key);
+                a.m_State &= ~AmbulanceFlags.Disabled;
+                em.SetComponentData(kv.Key, a);
+                Log.Debug($"unit={m_Units.CallsignOf(kv.Key)} available again after heli departure");
+            }
+        }
+
+        private readonly Dictionary<Entity, uint> m_FreeAt = new Dictionary<Entity, uint>(); // handed-over ambulance -> frame it becomes available
+
+        private readonly HashSet<Entity> m_Recalled = new HashSet<Entity>();
+        private bool m_Restore;
+
+        /// <summary>
+        /// After a load (missions are not saved): an ambulance that was driving its patient to a landing field
+        /// still targets the park. It searches a hospital by road again instead (vanilla FindHospital, same as
+        /// AmbulanceReturnSystem's retry). Runs also with the feature off, for saves made while it was on.
+        /// </summary>
+        private void RedirectOrphanedHandovers()
+        {
+            var em = EntityManager;
+            using var vehicles = m_Ambulances.ToEntityArray(Allocator.Temp);
+            foreach (var v in vehicles)
+            {
+                if (em.HasComponent<Helicopter>(v) || !em.HasComponent<Target>(v) || !em.HasComponent<PathOwner>(v)) continue;
+                var a = em.GetComponentData<Ambulance>(v);
+                var target = em.GetComponentData<Target>(v).m_Target;
+                if ((a.m_State & AmbulanceFlags.Transporting) == 0 || !em.HasComponent<Game.Buildings.Park>(target)) continue;
+                if (em.HasComponent<TripSource>(v)) ResponderDispatchSystem.ReleaseVehicle(em, v); // was held at the field
+                a.m_State = (a.m_State & ~AmbulanceFlags.Returning) | AmbulanceFlags.FindHospital;
+                em.SetComponentData(v, a);
+                Retarget(v, target); // keep a valid target until the hospital path arrives (see AmbulanceReturnSystem)
+                Log.Debug($"unit={m_Units.CallsignOf(v)} heli handover lost on load, driving patient to hospital by road");
+            }
+        }
+
+        /// <summary>
+        /// Backstop, also with the feature off: a medical heli vanilla dispatched to an ordinary call (outside our
+        /// missions) drops it and flies home. The flag hiding in HospitalSelectionSystem prevents most of these.
+        /// </summary>
+        private void RecallVanillaHelis()
+        {
+            var em = EntityManager;
+            using var helis = m_MedHelis.ToEntityArray(Allocator.Temp);
+            foreach (var h in helis)
+            {
+                if (m_Missions.ContainsKey(h) || em.HasComponent<ParkedCar>(h)) continue;
+                var a = em.GetComponentData<Ambulance>(h);
+                if (a.m_TargetPatient == Entity.Null && (a.m_State & AmbulanceFlags.Dispatched) == 0) continue;
+                if ((a.m_State & AmbulanceFlags.Transporting) != 0) continue; // patient on board: let vanilla deliver
+                var owner = em.GetComponentData<Owner>(h).m_Owner;
+                if (!em.Exists(owner) || !em.HasComponent<PathOwner>(h)) continue;
+                a.m_State = (a.m_State & ~(AmbulanceFlags.Dispatched | AmbulanceFlags.AtTarget | AmbulanceFlags.Critical)) | AmbulanceFlags.Returning | AmbulanceFlags.Disabled;
+                a.m_TargetPatient = Entity.Null;
+                a.m_TargetLocation = Entity.Null;
+                em.SetComponentData(h, a);
+                if (em.HasBuffer<ServiceDispatch>(h)) em.GetBuffer<ServiceDispatch>(h).Clear();
+                Retarget(h, owner);
+                if (m_Recalled.Add(h)) Log.Debug($"heli={h.Index} recalled from ordinary call");
+            }
         }
 
         // ---------------------------------------------------------------- clinic transfers
@@ -747,7 +900,7 @@ namespace RealisticEMS
                 // ponytail: health < 25 = critical; tune if transfers feel too frequent.
                 bool full = patients.Length >= capacity;
                 if (pick == Entity.Null || (lowest >= 25 && !full)) continue;
-                StartTransfer(clinic, pick, NearestTrauma(Pos(clinic), clinic), $"Insel, {(full ? "voll" : $"Gesundheit {lowest}")}");
+                StartTransfer(clinic, pick, NearestTrauma(Pos(clinic), clinic), $"island clinic, {(full ? "full" : $"health={lowest}")}");
             }
         }
 
@@ -765,7 +918,7 @@ namespace RealisticEMS
             var heli = Spawn(heliBase, clinic);
             if (heli == Entity.Null) return Mod.T("Kein Rettungshelikopter freigeschaltet", "No medical helicopter unlocked");
             m_Missions[heli] = new Mission { Kind = Kind.Transfer, Base = heliBase, Clinic = clinic, Dest = dest, Patient = patient, Since = m_Sim.frameIndex };
-            Mod.log.Info($"RTH {heli.Index}: Verlegung Patient {patient.Index} von Klinik {clinic.Index} ({why}) nach Spital {dest.Index}, Basis {heliBase.Index}");
+            Log.Debug($"heli={heli.Index} transfer patient={patient.Index} from clinic={clinic.Index} to hospital={dest.Index} base={heliBase.Index}: {why}");
             return null;
         }
 
@@ -793,7 +946,7 @@ namespace RealisticEMS
             var c = em.GetComponentData<Citizen>(pick);
             c.m_Health = 10;
             em.SetComponentData(pick, c);
-            return StartTransfer(hospital, pick, dest, "Debug: Patient kritisch") ?? Mod.T($"RTH alarmiert für Patient {pick.Index}", $"Helicopter dispatched for patient {pick.Index}");
+            return StartTransfer(hospital, pick, dest, "debug: patient critical") ?? Mod.T($"RTH alarmiert für Patient {pick.Index}", $"Helicopter dispatched for patient {pick.Index}");
         }
 
         /// <summary>Delivered: the patient now lies in the destination hospital.</summary>
@@ -805,10 +958,10 @@ namespace RealisticEMS
             var from = em.GetBuffer<Patient>(m.Clinic);
             bool found = false;
             for (int i = from.Length - 1; i >= 0; i--) if (from[i].m_Patient == m.Patient) { from.RemoveAt(i); found = true; }
-            if (!found) { Mod.log.Info($"RTH: Patient {m.Patient.Index} nicht mehr in Klinik {m.Clinic.Index}, Verlegung entfällt"); return; }
+            if (!found) { Log.Debug($"transfer cancelled, patient={m.Patient.Index} no longer in clinic={m.Clinic.Index}"); return; }
             em.GetBuffer<Patient>(m.Dest).Add(new Patient(m.Patient));
             if (em.HasComponent<CurrentBuilding>(m.Patient)) em.SetComponentData(m.Patient, new CurrentBuilding(m.Dest));
-            Mod.log.Info($"RTH: Patient {m.Patient.Index} verlegt von Klinik {m.Clinic.Index} nach Spital {m.Dest.Index}");
+            Log.Debug($"transferred patient={m.Patient.Index} from clinic={m.Clinic.Index} to hospital={m.Dest.Index}");
         }
 
         // ---------------------------------------------------------------- vehicle helpers
@@ -861,12 +1014,13 @@ namespace RealisticEMS
         /// <summary>Runs at load; logs an error if tiering or the landing-site filter regresses.</summary>
         public static void SelfCheck()
         {
-            void Expect(bool ok, string what) { if (!ok) Mod.log.Error("Helicopter self-check failed: " + what); }
+            void Expect(bool ok, string what) { if (!ok) Log.Error("Helicopter self-check failed: " + what); }
             Expect(TierOf(500, 500, true) == Tier.Trauma, "biggest hospital is trauma");
             Expect(TierOf(100, 500, true) == Tier.Clinic, "small hospital is clinic");
             Expect(TierOf(400, 500, false) == Tier.Clinic, "no injury care is clinic");
             Expect(TierOf(0, 500, true) == Tier.None, "depot is no hospital");
             Expect(IsLandingName("BasketballCourt01") && IsLandingName("Soccer Field") && IsLandingName("SportsPark"), "sports fields land");
+            Expect(IsFlat(new[] { 10f, 10.5f, 11f, 10f, 10.2f }) && !IsFlat(new[] { 10f, 12f, 10f, 10f, 10f }), "landing slope limit");
             Expect(!IsLandingName("CityPark01") && !IsLandingName("ParkingLot") && !IsLandingName("TransportPark") && !IsLandingName(null), "plain parks/lots do not");
         }
     }

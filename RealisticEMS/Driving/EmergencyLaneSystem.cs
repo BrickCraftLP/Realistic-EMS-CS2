@@ -72,18 +72,23 @@ namespace RealisticEMS
 
         protected override void OnUpdate()
         {
+            if (!Log.Enabled(LogLevel.Trace)) { UpdateAll(); return; } // cost log is Trace only
             m_Watch.Restart();
             UpdateAll();
             m_Watch.Stop();
             Stats();
         }
 
+        private readonly List<Entity> m_SirenChanged = new List<Entity>();
+        private readonly HashSet<Entity> m_SirenSeen = new HashSet<Entity>();
+
         private void UpdateAll()
         {
             m_Frame++;
             var s = Mod.Setting;
             PassOnRoadObstacles();
-            var sirenChanged = new List<Entity>();
+            var sirenChanged = m_SirenChanged;
+            sirenChanged.Clear();
             if (!s.SirenOnlyWhenNeeded && Quiet.Count > 0) { ReleaseSirens(null, sirenChanged); RefreshEffects(sirenChanged); sirenChanged.Clear(); }
             if (!s.PushBlockers && !s.EmergencyLaneChange && !s.EmergencyCorridor && !s.OncomingOvertake && !s.ClearRedLight && !s.SirenOnlyWhenNeeded
                 && m_Held.Count == 0 && m_Hidden.Count == 0 && m_ShiftedAt.Count == 0) return;
@@ -96,7 +101,8 @@ namespace RealisticEMS
             using var cars = m_Query.ToComponentDataArray<Car>(Allocator.Temp);
             using var blockers = m_Query.ToComponentDataArray<Blocker>(Allocator.Temp);
             bool changed = false;
-            var sirenSeen = s.SirenOnlyWhenNeeded ? new HashSet<Entity>() : null;
+            m_SirenSeen.Clear();
+            var sirenSeen = s.SirenOnlyWhenNeeded ? m_SirenSeen : null;
 
             for (int i = 0; i < entities.Length; i++)
             {
@@ -154,7 +160,7 @@ namespace RealisticEMS
             if (InRoundabout(e, lane)) { st.InGap = false; ReleasePins(e, st, ref lane); EndSqueeze(st); EndOncoming(e, st); return; }
 
             bool gap = s.EmergencyCorridor && DriveGap(e, st, ref lane);
-            if (gap != st.InGap) Mod.log.Info($"Einsatzfahrzeug {e.Index}: Rettungsgasse {(gap ? "gebildet" : "beendet")}");
+            if (gap != st.InGap) Log.Debug($"vehicle={e.Index} corridor {(gap ? "formed" : "ended")}");
             st.InGap = gap;
             st.GapStill = gap && speed < 0.3f ? st.GapStill + 1 : 0;
             if (!gap) { st.Forced.Clear(); ReleasePins(e, st, ref lane); }
@@ -196,9 +202,9 @@ namespace RealisticEMS
             string on = b != Entity.Null && em.HasComponent<CarCurrentLane>(b) ? $"auf Spur {em.GetComponentData<CarCurrentLane>(b).m_Lane.Index}" : "ohne Spur";
             bool listed = false;
             if (em.HasBuffer<LaneObject>(lane.m_Lane)) foreach (var o in em.GetBuffer<LaneObject>(lane.m_Lane, true)) listed |= o.m_LaneObject == b;
-            Mod.log.Info($"Einsatzfahrzeug {e.Index}: steht seit 1 s in der Rettungsgasse (Spur {lane.m_Lane.Index}, Wechsel {lane.m_ChangeLane.Index}), " +
-                $"Blocker {b.Index} {blocker.m_Type} {on}, angehalten {m_Held.ContainsKey(b)}, ausgeblendet {m_Hidden.ContainsKey(Tractor(b))}, " +
-                $"in eigener Spurliste {listed}: fährt durch");
+            Log.Debug($"vehicle={e.Index} stopped in corridor for 1s, driving through lane={lane.m_Lane.Index} change_lane={lane.m_ChangeLane.Index} " +
+                $"blocker={b.Index} blocker_type={blocker.m_Type} {on} held={m_Held.ContainsKey(b)} hidden={m_Hidden.ContainsKey(Tractor(b))} " +
+                $"in_own_lane_list={listed}");
         }
 
         protected override void OnGamePreload(Colossal.Serialization.Entities.Purpose purpose, GameMode mode)

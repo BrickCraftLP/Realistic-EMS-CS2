@@ -18,6 +18,7 @@ namespace RealisticEMS
     /// <summary>
     /// Extra section in the selected-vehicle panel: Einsatzcode, a detail text and every unit on the same call.
     /// Shown for ambulances, NEF and ResponderDispatchSystem police/fire cars. Rendered by UI/src/mods/call-section.tsx.
+    /// Fires (FireAlarmSystem): the same overview on the burning building and on every unit sent there.
     /// </summary>
     public partial class CallInfoSection : InfoSectionBase
     {
@@ -53,7 +54,7 @@ namespace RealisticEMS
             });
         }
 
-        protected override void Reset() { m_Code = null; m_Info = ""; m_Phase = m_Times = ""; m_Progress = -1; m_List.Clear(); }
+        protected override void Reset() { m_Code = null; m_FireCode = null; m_Info = ""; m_Phase = m_Times = ""; m_Progress = -1; m_List.Clear(); }
 
         private Entity PatientOf(Entity e)
         {
@@ -80,15 +81,88 @@ namespace RealisticEMS
         private string StatusOf(Entity e)
         {
             var em = EntityManager;
+            if (ResponderDispatchSystem.Standby.Contains(e)) return ResponderDispatchSystem.HeldAt.ContainsKey(e) ? "am Einsatzort" : "Anfahrt";
+            if (m_Responders.IsCordon(e)) return ResponderDispatchSystem.HeldAt.ContainsKey(e) ? Mod.T("Strassensperre", "Road block") : Mod.T("Anfahrt Sperre", "En route to road block");
             bool parked = em.HasComponent<ParkedCar>(e);
             if (em.TryGetComponent<Ambulance>(e, out var a)) return DispatchUISystem.Status(em, e, a, parked);
             if (em.TryGetComponent<PoliceCar>(e, out var p)) return DispatchUISystem.PoliceStatus(em, e, p, parked);
             return ResponderDispatchSystem.HeldAt.ContainsKey(e) ? "am Einsatzort" : "Anfahrt"; // fire engine
         }
 
+        /// <summary>Burning building the selection belongs to: the building itself, or a police car / engine sent there.</summary>
+        private Entity FireOf(Entity e)
+        {
+            var em = EntityManager;
+            if (FireAlarmSystem.Scenes.ContainsKey(e)) return e;
+            var b = m_Responders.FireOf(e);
+            if (b != Entity.Null) return FireAlarmSystem.Scenes.ContainsKey(b) ? b : Entity.Null;
+            return em.HasComponent<FireEngine>(e) && em.TryGetComponent<Target>(e, out var t) && FireAlarmSystem.Scenes.ContainsKey(t.m_Target) ? t.m_Target : Entity.Null;
+        }
+
+        private void UpdateFire(Entity building)
+        {
+            var em = EntityManager;
+            var s = FireAlarmSystem.Scenes[building];
+            var units = m_Responders.CarsAtFire(building).Where(em.Exists).ToList();
+            using (var cars = m_Responders2.ToEntityArray(Allocator.Temp))
+                foreach (var c in cars) if (!units.Contains(c) && em.HasComponent<FireEngine>(c) && em.GetComponentData<Target>(c).m_Target == building) units.Add(c);
+            foreach (var e in s.Engines) if (!units.Contains(e) && em.Exists(e) && !em.HasComponent<Deleted>(e) && em.HasComponent<TripSource>(e)) units.Add(e); // fire watch
+            // Ambulances/NEFs for patients from the fire: picked up at the building, or hurt by its fire and already outside.
+            var fireEvent = em.TryGetComponent<Game.Events.OnFire>(building, out var onFire) ? onFire.m_Event : Entity.Null;
+            using (var amb = m_Ambulances.ToEntityArray(Allocator.Temp))
+                foreach (var a in amb)
+                {
+                    if (units.Contains(a)) continue;
+                    var va = em.GetComponentData<Ambulance>(a);
+                    if (va.m_TargetPatient == Entity.Null) continue;
+                    bool fromFire = va.m_TargetLocation == building
+                        || fireEvent != Entity.Null && em.TryGetComponent<Game.Citizens.HealthProblem>(va.m_TargetPatient, out var hp) && hp.m_Event == fireEvent;
+                    if (fromFire) units.Add(a);
+                }
+            if (selectedEntity != building && !units.Contains(selectedEntity)) units.Add(selectedEntity);
+            units = units.OrderBy(u => em.HasComponent<FireEngine>(u) ? 0 : em.HasComponent<Ambulance>(u) ? 1 : 2).ToList(); // engines, rescue, police
+
+            int engines = units.Count(u => em.HasComponent<FireEngine>(u));
+            int nefs = units.Count(u => NefDispatchSystem.IsNef(em, u));
+            int rtws = units.Count(u => em.HasComponent<Ambulance>(u)) - nefs;
+            int police = units.Count - engines - rtws - nefs;
+            m_FireCode = s.Code?.ToString() ?? "";
+            m_FireLevel = s.Code != null ? s.Code.Level.ToString()[0].ToString() : "";
+            var lines = new List<string>
+            {
+                s.Code != null ? $"{s.Code.Level}: {s.Code.Complaint}" : "",
+                s.Code?.Reason ?? "",
+                s.Code != null ? Mod.T("Alarmiert: ", "Dispatched: ") + s.Code.UnitsText() : "",
+                Mod.T("Gebäudebrand: ", "Building fire: ") + LevelName(s.Level) + Mod.T($", Alarmstufe {s.Alarm}", $", alarm {s.Alarm}"),
+                Mod.T($"Im Einsatz: {engines} Löschfahrzeuge, {rtws} RTW, {nefs} NEF, {police} Polizei", $"Responding: {engines} engines, {rtws} AMB, {nefs} DOC, {police} police"),
+            };
+            if (s.Closed) lines.Add(Mod.T("Strasse gesperrt, Umleitung aktiv", "Street closed, detour active"));
+            m_Info = string.Join("\n", lines.Where(l => l != ""));
+            uint now = m_Sim.frameIndex;
+            if (s.OutAt == 0) { m_Phase = Mod.T("Brandbekämpfung", "Firefighting"); m_Progress = math.saturate((float)(now - s.Start) / s.MinFrames); }
+            else { m_Phase = Mod.T("Nachlöscharbeiten / Brandwache", "Overhaul / fire watch"); m_Progress = math.saturate((float)(now - s.Start) / s.MinFrames); }
+            m_Times = Mod.T("Seit Alarmierung: ", "Since dispatch: ") + Min(FireAlarmSystem.FireFrames(now - s.Start));
+            m_List.Clear();
+            foreach (var u in units) m_List.Add((u, m_Units.CallsignOf(u), StatusOf(u)));
+        }
+
+        private static string LevelName(FireAlarmSystem.Level l) => l switch
+        {
+            FireAlarmSystem.Level.Small => Mod.T("Einfamilienhaus / Kleinbau", "house / small building"),
+            FireAlarmSystem.Level.Medium => Mod.T("Mehrfamilienhaus", "medium residential"),
+            FireAlarmSystem.Level.Large => Mod.T("Hochhaus / Bürogebäude", "high-rise / office"),
+            FireAlarmSystem.Level.Industrial => Mod.T("Industrie", "industrial"),
+            _ => Mod.T("Spital / Schule", "hospital / school"),
+        };
+
+        private string m_FireCode, m_FireLevel;
+
         protected override void OnUpdate()
         {
             var em = EntityManager;
+            m_FireCode = null;
+            var fire = FireOf(selectedEntity);
+            if (fire != Entity.Null) { visible = true; UpdateFire(fire); return; }
             var patient = PatientOf(selectedEntity);
             visible = patient != Entity.Null;
             if (!visible) return;
@@ -130,7 +204,6 @@ namespace RealisticEMS
         }
 
         private static string Min(uint frames) => $"{frames / OnSceneCareSystem.FramesPerGameMinute:0} min";
-        private static string DriveMin(uint frames) => $"{frames / OnSceneCareSystem.DriveFramesPerMinute:0} min";
 
         // Bar = treatment progress only (-1 hides it in the other phases).
         private void Timeline(Entity patient, List<Entity> units)
@@ -141,11 +214,11 @@ namespace RealisticEMS
             {
                 m_Phase = Mod.T("Anfahrt", "En route"); m_Progress = -1; m_Times = ""; return;
             }
-            var t = new List<string> { Mod.T("Seit Alarmierung: ", "Since dispatch: ") + DriveMin(now - dispatch) };
-            if (arrive != 0) t.Add(Mod.T("RTW vor Ort nach ", "Ambulance on scene after ") + DriveMin(arrive - dispatch));
-            if (nefArrive != 0) t.Add(Mod.T("NEF vor Ort nach ", "Doctor on scene after ") + DriveMin(nefArrive - dispatch));
+            var t = new List<string> { Mod.T("Seit Alarmierung: ", "Since dispatch: ") + Min(now - dispatch) };
+            if (arrive != 0) t.Add(Mod.T("RTW vor Ort nach ", "Ambulance on scene after ") + Min(arrive - dispatch));
+            if (nefArrive != 0) t.Add(Mod.T("NEF vor Ort nach ", "Doctor on scene after ") + Min(nefArrive - dispatch));
             if (start != 0) t.Add(Mod.T("Versorgung seit ", "Treating for ") + Min((transport != 0 ? transport : now) - start) + (care > 0 ? $" / {Min(care)}" : ""));
-            if (transport != 0) t.Add(Mod.T("Transport seit ", "Transporting for ") + DriveMin(now - transport));
+            if (transport != 0) t.Add(Mod.T("Transport seit ", "Transporting for ") + Min(now - transport));
             m_Times = string.Join("\n", t);
 
             if (transport != 0) { m_Phase = Mod.T("Transport ins Krankenhaus", "Transport to hospital"); m_Progress = start != 0 ? 1 : -1; } // treatment over: bar stays full
@@ -158,8 +231,8 @@ namespace RealisticEMS
 
         public override void OnWriteProperties(IJsonWriter w)
         {
-            w.PropertyName("code"); w.Write(m_Code?.ToString() ?? "");
-            w.PropertyName("level"); w.Write(m_Code != null ? m_Code.Level.ToString()[0].ToString() : "");
+            w.PropertyName("code"); w.Write(m_FireCode ?? m_Code?.ToString() ?? "");
+            w.PropertyName("level"); w.Write(m_FireCode != null ? m_FireLevel : m_Code != null ? m_Code.Level.ToString()[0].ToString() : "");
             w.PropertyName("info"); w.Write(m_Info ?? "");
             w.PropertyName("phase"); w.Write(m_Phase ?? "");
             w.PropertyName("times"); w.Write(m_Times ?? "");

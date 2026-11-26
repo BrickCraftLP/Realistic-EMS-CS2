@@ -37,6 +37,8 @@ namespace RealisticEMS
         private EntityQuery m_Ambulances, m_Hospitals;
         private UnitNamingSystem m_Units;
         private HelicopterSystem m_Heli;
+        private ResponderDispatchSystem m_Responders;
+        private RoadReachSystem m_Reach;
         private Random m_Random = new Random(0x5EF1);
 
         private class Mission { public Entity Patient, Location, Hospital; public bool Escorting; public int Frames; }
@@ -57,8 +59,11 @@ namespace RealisticEMS
             base.OnCreate();
             m_Units = World.GetOrCreateSystemManaged<UnitNamingSystem>();
             m_Heli = World.GetOrCreateSystemManaged<HelicopterSystem>();
+            m_Responders = World.GetOrCreateSystemManaged<ResponderDispatchSystem>();
+            m_Reach = World.GetOrCreateSystemManaged<RoadReachSystem>();
             m_Ambulances = GetEntityQuery(ComponentType.ReadOnly<Ambulance>(), ComponentType.ReadOnly<Owner>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
-            m_Hospitals = GetEntityQuery(ComponentType.ReadOnly<Hospital>(), ComponentType.ReadOnly<Patient>(), ComponentType.ReadOnly<Transform>(),
+            m_Hospitals = GetEntityQuery(ComponentType.ReadOnly<Hospital>(), ComponentType.ReadOnly<Transform>(), // hospitals, and fire stations in NEF mode
+
                 ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
         }
 
@@ -66,6 +71,27 @@ namespace RealisticEMS
         {
             base.OnGamePreload(purpose, mode);
             m_Missions.Clear(); m_Pending.Clear(); m_Handled.Clear(); m_NoStart.Clear(); NefByPatient.Clear();
+            m_Restore = true;
+        }
+
+        private bool m_Restore;
+
+        /// <summary>
+        /// After a load: missions are not saved, but each NEF still carries its patient and call location, so the
+        /// mission is rebuilt from it (instead of a second NEF being requested for the same call).
+        /// </summary>
+        private void RestoreMissions(NativeArray<Entity> vehicles)
+        {
+            var em = EntityManager;
+            foreach (var v in vehicles)
+            {
+                if (!IsNef(em, v) || em.HasComponent<ParkedCar>(v)) continue;
+                var a = em.GetComponentData<Ambulance>(v);
+                if (a.m_TargetPatient == Entity.Null || !em.Exists(a.m_TargetPatient)) continue;
+                m_Missions[v] = new Mission { Patient = a.m_TargetPatient, Location = a.m_TargetLocation, Hospital = em.GetComponentData<Owner>(v).m_Owner };
+                m_Handled.Add(a.m_TargetPatient);
+                Log.Debug($"nef={v.Index} mission restored after load patient={a.m_TargetPatient.Index}");
+            }
         }
 
         protected override void OnUpdate()
@@ -73,6 +99,7 @@ namespace RealisticEMS
             if (!Mod.Setting.EnableNef || Prefab == Entity.Null) { NefByPatient.Clear(); return; }
             var em = EntityManager;
             using var vehicles = m_Ambulances.ToEntityArray(Allocator.Temp);
+            if (m_Restore) { m_Restore = false; RestoreMissions(vehicles); }
 
             var rtwByPatient = new Dictionary<Entity, Entity>();
             var nefs = new List<Entity>();
@@ -83,19 +110,21 @@ namespace RealisticEMS
                 if (a.m_TargetPatient == Entity.Null) continue;
                 rtwByPatient[a.m_TargetPatient] = v;
                 if (m_Handled.Contains(a.m_TargetPatient) || HelicopterSystem.HeliPatients.Contains(a.m_TargetPatient)
+                    || StationFleetSystem.IsNaw(em, v) // doctor already on board
                     || !m_Units.TryGetCode(v, out var code) || code == null) continue;
 
                 if (code.Nef > 0)
                 {
                     // The rescue helicopter goes instead when it is faster (HelicopterSystem decides).
                     if (m_Heli.TryDispatchDoctor(a.m_TargetPatient, a.m_TargetLocation, $"Code {code} verlangt Notarzt, RTH schneller")) m_Handled.Add(a.m_TargetPatient);
-                    else Request(a.m_TargetPatient, a.m_TargetLocation, $"Code {code} verlangt NEF");
+                    else Request(a.m_TargetPatient, a.m_TargetLocation, $"code {code} requires doctor car");
                 }
                 else if (OnSceneCareSystem.OnScene(em, v)) // not AtTarget: the on-scene hold clears it
                 {
                     m_Handled.Add(a.m_TargetPatient); // one roll per patient
-                    if (m_Random.NextFloat() < CallInChance(code.Level))
-                        Request(a.m_TargetPatient, a.m_TargetLocation, $"{m_Units.CallsignOf(v)} fordert NEF nach ({code})");
+                    if (m_Random.NextFloat() < CallInChance(code.Level)
+                        && !m_Heli.TryDispatchDoctor(a.m_TargetPatient, a.m_TargetLocation, $"{m_Units.CallsignOf(v)} requested doctor, heli faster"))
+                        Request(a.m_TargetPatient, a.m_TargetLocation, $"{m_Units.CallsignOf(v)} requested doctor car (code {code})");
                 }
             }
 
@@ -124,7 +153,7 @@ namespace RealisticEMS
             m_Handled.Add(patient);
             if (location == Entity.Null || m_Pending.ContainsKey(patient)) return;
             m_Pending[patient] = (location, 0);
-            Mod.log.Info($"NEF angefordert für Patient {patient.Index}: {why}");
+            Log.Debug($"doctor car requested patient={patient.Index}: {why}");
         }
 
         private void AssignPending()
@@ -136,6 +165,8 @@ namespace RealisticEMS
                 bool stillNeeded = em.Exists(patient) && em.HasComponent<HealthProblem>(patient)
                     && (em.GetComponentData<HealthProblem>(patient).m_Flags & HealthProblemFlags.Dead) == 0 && em.Exists(location);
                 if (!stillNeeded || frames > 3600) { m_Pending.Remove(patient); continue; }
+                // Burning building with an NEF on standby: that one comes, none from a hospital.
+                if (FireAlarmSystem.Scenes.ContainsKey(location) && m_Responders.ReserveStandby(location, patient, true)) { m_Pending.Remove(patient); continue; }
                 var hospital = FindHospitalWithFreeNef(location);
                 if (hospital == Entity.Null) { m_Pending[patient] = (location, frames + 16); continue; } // stays open
                 m_Pending.Remove(patient);
@@ -156,9 +187,11 @@ namespace RealisticEMS
             {
                 var prefab = em.GetComponentData<PrefabRef>(h).m_Prefab;
                 if (m_NoStart.Contains(h) || !em.HasComponent<HospitalData>(prefab)) continue;
+                if (!m_Reach.Connected(h, location)) continue; // across the water: never by road
                 var data = em.GetComponentData<HospitalData>(prefab);
-                if (data.m_PatientCapacity <= 0 || data.m_AmbulanceCapacity <= 0) continue; // only hospitals that send vehicles out
-                if ((busy.TryGetValue(h, out var used) ? used : 0) >= StationFleetSystem.NefLimit(em, h)) continue;
+                bool fireNef = em.HasComponent<Game.Buildings.FireStation>(h) && StationFleetSystem.Mode(em, h) == 2;
+                if (!fireNef && (!em.HasComponent<Patient>(h) || data.m_PatientCapacity <= 0 || data.m_AmbulanceCapacity <= 0)) continue; // only hospitals that send vehicles out
+                if ((busy.TryGetValue(h, out var used) ? used : 0) >= (fireNef ? 1 : StationFleetSystem.NefLimit(em, h))) continue;
                 // ponytail: straight-line distance; the route itself is vanilla pathfinding.
                 float d = math.distance(at, em.GetComponentData<Transform>(h).m_Position);
                 if (d < bestDist) { bestDist = d; best = h; }
@@ -166,8 +199,34 @@ namespace RealisticEMS
             return best;
         }
 
+        /// <summary>A fire standby NEF (ResponderDispatchSystem.HandOver) becomes a normal mission for <paramref name="patient"/>.</summary>
+        public void AdoptStandby(Entity nef, Entity patient, Entity location, bool held)
+        {
+            var em = EntityManager;
+            var a = em.GetComponentData<Ambulance>(nef);
+            a.m_TargetPatient = patient; a.m_TargetLocation = location;
+            a.m_State = (a.m_State & ~(AmbulanceFlags.Returning | AmbulanceFlags.AtTarget | AmbulanceFlags.Disabled | AmbulanceFlags.Transporting)) | AmbulanceFlags.Dispatched | AmbulanceFlags.Critical;
+            em.SetComponentData(nef, a);
+            var dispatches = em.GetBuffer<ServiceDispatch>(nef);
+            dispatches.Clear();
+            var request = em.GetComponentData<HealthProblem>(patient).m_HealthcareRequest;
+            if (request != Entity.Null) dispatches.Add(new ServiceDispatch(request)); // see Spawn: vanilla then waits on scene
+            Retarget(nef, location);
+            if (held) ResponderDispatchSystem.ReleaseVehicle(em, nef);
+            m_Missions[nef] = new Mission { Patient = patient, Location = location, Hospital = em.GetComponentData<Owner>(nef).m_Owner };
+            Log.Info($"nef={nef.Index} on standby takes patient={patient.Index} at fire={location.Index}");
+        }
+
+        /// <summary>Fire standby NEF (no patient) to <paramref name="location"/>, from the nearest hospital with a free one. Null if none.</summary>
+        public Entity SpawnStandby(Entity location)
+        {
+            if (!Mod.Setting.EnableNef || Prefab == Entity.Null) return Entity.Null;
+            var hospital = FindHospitalWithFreeNef(location);
+            return hospital == Entity.Null ? Entity.Null : Spawn(hospital, Entity.Null, location);
+        }
+
         /// <summary>Same steps as HealthcareVehicleSelectData.CreateVehicle + HospitalAISystem.SpawnVehicle.</summary>
-        private void Spawn(Entity hospital, Entity patient, Entity location)
+        private Entity Spawn(Entity hospital, Entity patient, Entity location)
         {
             var em = EntityManager;
             EntityArchetype archetype = em.GetComponentData<ObjectData>(Prefab).m_Archetype;
@@ -186,16 +245,19 @@ namespace RealisticEMS
             // The patient's own request: vanilla LoadPatients then waits on scene while the patient is there and has not
             // boarded another vehicle (without a dispatch it returns home on arrival). Residents only walk to the
             // vehicle that handles their request, so they never board the NEF.
+            if (patient == Entity.Null) { ApplyColors(e); Log.Debug($"nef={e.Index} standby hospital={hospital.Index} to={location.Index}"); return e; }
             var request = em.GetComponentData<HealthProblem>(patient).m_HealthcareRequest;
             if (request != Entity.Null) em.GetBuffer<ServiceDispatch>(e).Add(new ServiceDispatch(request));
             m_Missions[e] = new Mission { Patient = patient, Location = location, Hospital = hospital };
-            Mod.log.Info($"NEF {e.Index} alarmiert von Spital {hospital.Index} zu Patient {patient.Index}");
+            Log.Debug($"nef={e.Index} dispatched hospital={hospital.Index} patient={patient.Index}");
+            return e;
         }
 
         private void UpdateNef(Entity nef, Dictionary<Entity, Entity> rtwByPatient)
         {
             var em = EntityManager;
             if (em.HasComponent<ParkedCar>(nef)) { em.AddComponent<Deleted>(nef); return; } // never parks, see class summary
+            if (ResponderDispatchSystem.Standby.Contains(nef)) { ApplyColors(nef); return; } // fire standby: ResponderDispatchSystem owns it
             var a = em.GetComponentData<Ambulance>(nef);
             var before = a.m_State;
             m_Missions.TryGetValue(nef, out var mission);
@@ -211,8 +273,9 @@ namespace RealisticEMS
                 m_NoStart.Add(mission.Hospital);
                 m_Missions.Remove(nef);
                 if (!m_Pending.ContainsKey(mission.Patient)) m_Pending[mission.Patient] = (mission.Location, 0);
-                em.AddComponent<Deleted>(nef);
-                Mod.log.Warn($"NEF {nef.Index}: kann nicht von Spital {mission.Hospital.Index} losfahren ({(noRoute ? "keine Route" : "steht im Stellplatz")}), versuche anderes Spital");
+                if (em.HasComponent<ParkedCar>(nef)) em.AddComponent<Deleted>(nef);
+                else { SendHome(nef, ref a, "cannot start"); a.m_State |= AmbulanceFlags.Disabled; em.SetComponentData(nef, a); } // parks, then line 1 of UpdateNef deletes it
+                Log.Warn($"nef={nef.Index} cannot leave hospital={mission.Hospital.Index} ({(noRoute ? "no route" : "stuck in bay")}), trying another hospital");
                 return;
             }
             if ((a.m_State & AmbulanceFlags.Returning) != 0)
@@ -231,10 +294,10 @@ namespace RealisticEMS
                 bool busy = (a.m_State & (AmbulanceFlags.Dispatched | AmbulanceFlags.Transporting)) != 0;
                 // No mission (e.g. NEF from a save; missions are not saved): vanilla would keep dispatching it and we
                 // would keep sending it home every tick. It is never a regular ambulance, so remove it.
-                if (mission == null) { em.AddComponent<Deleted>(nef); return; }
+                if (mission == null) { SendHome(nef, ref a, "no mission (from save)"); a.m_State |= AmbulanceFlags.Disabled; em.SetComponentData(nef, a); return; } // deleted once parked
                 // Safety net for a stuck NEF; the normal end is vanilla's "patient gone".
                 int timeout = (int)((Mod.Setting.NefMaxWaitMinutes + Mod.Setting.OnSceneMinutes + 120) * OnSceneCareSystem.FramesPerGameMinute);
-                if (mission == null || dead || mission.Frames > timeout) SendHome(nef, ref a, dead ? "Patient verstorben" : mission == null ? "Einsatz beendet" : "Zeitüberschreitung");
+                if (mission == null || dead || mission.Frames > timeout) SendHome(nef, ref a, dead ? "patient died" : mission == null ? "mission over" : "timeout");
             }
             if (a.m_State != before) em.SetComponentData(nef, a);
             ApplyColors(nef);
@@ -265,12 +328,12 @@ namespace RealisticEMS
             var hospital = em.GetComponentData<Target>(rtw).m_Target;
             if (hospital == Entity.Null) return;
             m.Escorting = true; // decided once
-            if (m_Heli.IsHandingOver(rtw)) { Mod.log.Info($"NEF {nef.Index}: Patient fliegt mit RTH, frei"); return; }
+            if (m_Heli.IsHandingOver(rtw)) { Log.Debug($"nef={nef.Index} free, patient flies with heli"); return; }
             bool critical = (a.m_State & AmbulanceFlags.Critical) != 0;
             var level = m_Units.TryGetCode(rtw, out var code) && code != null ? code.Level : AmpdsLevel.Alpha;
             if (!critical && m_Random.NextFloat() >= EscortChance(level))
             {
-                Mod.log.Info($"NEF {nef.Index}: Notarzt nicht nötig, frei nach Abfahrt des RTW"); // vanilla sends it home once the patient is gone
+                Log.Debug($"nef={nef.Index} doctor not needed, free once ambulance leaves"); // vanilla sends it home once the patient is gone
                 return;
             }
             var n = em.GetComponentData<Ambulance>(nef);
@@ -280,7 +343,7 @@ namespace RealisticEMS
             n.m_TargetPatient = Entity.Null;
             em.SetComponentData(nef, n);
             Retarget(nef, hospital);
-            Mod.log.Info($"NEF {nef.Index}: begleitet {m_Units.CallsignOf(rtw)} ins Spital {hospital.Index}{(critical ? " mit Blaulicht" : "")}");
+            Log.Debug($"nef={nef.Index} escorting unit={m_Units.CallsignOf(rtw)} to hospital={hospital.Index} lights={critical}");
         }
 
         private void SendHome(Entity nef, ref Ambulance a, string why)
@@ -291,7 +354,7 @@ namespace RealisticEMS
             a.m_TargetLocation = Entity.Null;
             Retarget(nef, owner);
             m_Missions.Remove(nef);
-            Mod.log.Info($"NEF {nef.Index}: rückt ein ({why})");
+            Log.Debug($"nef={nef.Index} returning: {why}");
         }
 
         private void Retarget(Entity e, Entity target)
@@ -317,7 +380,7 @@ namespace RealisticEMS
             var em = EntityManager;
             if (!em.HasBuffer<CustomMeshColor>(nef))
             {
-                if (m_NoTintLogged.Add(nef)) Mod.log.Warn($"NEF {nef.Index}: body supports no custom colours");
+                if (m_NoTintLogged.Add(nef)) Log.Warn($"nef={nef.Index} body supports no custom colours");
                 return;
             }
             var custom = em.GetBuffer<CustomMeshColor>(nef);

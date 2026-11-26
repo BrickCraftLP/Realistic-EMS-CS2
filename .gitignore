@@ -3,3 +3,7 @@ obj/
 .vs/
 *.user
 tools/private.txt
+.agents/
+.claude/
+.impeccable/
+skills-lock.json

@@ -39,6 +39,7 @@ namespace RealisticEMS
         private const int GroundN = 256; private const float GroundCell = 14336f / GroundN; // whole playable map, 56 m cells // buildings are only collected while the 3D map is open
         private NameSystem m_NameSystem;
         private UnitNamingSystem m_Units;
+        private ResponderDispatchSystem m_Responders;
         private SimulationSystem m_Sim;
         private TimeSystem m_Time;
         private int m_Frame;
@@ -48,6 +49,7 @@ namespace RealisticEMS
             base.OnCreate();
             m_NameSystem = World.GetOrCreateSystemManaged<NameSystem>();
             m_Units = World.GetOrCreateSystemManaged<UnitNamingSystem>();
+            m_Responders = World.GetOrCreateSystemManaged<ResponderDispatchSystem>();
             m_Sim = World.GetOrCreateSystemManaged<SimulationSystem>();
             m_Time = World.GetOrCreateSystemManaged<TimeSystem>();
             m_Ambulances = GetEntityQuery(ComponentType.ReadOnly<Ambulance>(), ComponentType.ReadOnly<Owner>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
@@ -74,6 +76,9 @@ namespace RealisticEMS
             m_Healthy = GetEntityQuery(ComponentType.ReadOnly<Citizen>(), ComponentType.ReadOnly<CurrentBuilding>(), ComponentType.Exclude<HealthProblem>(),
                 ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
             AddBinding(new TriggerBinding<string, int>(Group, "debugCall", DebugCall));
+            AddBinding(new TriggerBinding<string>(Group, "debugFire", DebugFire));
+            AddBinding(new TriggerBinding(Group, "debugSign", DebugSign));
+            AddBinding(new TriggerBinding<string>(Group, "debugAccident", DebugAccident));
             AddBinding(new TriggerBinding<int, int>(Group, "jumpTo", JumpTo));
             AddBinding(m_Settings = new RawValueBinding(Group, "settings", WriteSettings));
             AddBinding(new TriggerBinding<string, int>(Group, "setSetting", SetSetting));
@@ -100,6 +105,7 @@ namespace RealisticEMS
             // Fixed URLs only: the UI cannot ask for an arbitrary address.
             AddBinding(new TriggerBinding(Group, "openIssues", () => UnityEngine.Application.OpenURL("https://github.com/BrickCraftLP/Realistic-EMS-CS2/issues")));
             AddBinding(new TriggerBinding(Group, "openReleases", () => UnityEngine.Application.OpenURL("https://github.com/BrickCraftLP/Realistic-EMS-CS2/releases")));
+            AddBinding(new TriggerBinding(Group, "openDiscord", () => UnityEngine.Application.OpenURL("https://discord.gg/hvhxPs7CCA")));
             VehicleStateSection.Install(World);
         }
 
@@ -124,6 +130,9 @@ namespace RealisticEMS
             cam.activeCameraController = cam.orbitCameraController;
         }
 
+        /// <summary>Opens the dispatch window (FirePlanSystem shows its result there).</summary>
+        public void Open() { m_Debug.Update(DebugUnlocked); m_Open.Update(true); m_State.Update(); m_RoadCount = -1; }
+
         private static bool NewsDue => Mod.Setting.LastSeenVersion != Mod.Version;
 
         /// <summary>
@@ -140,7 +149,7 @@ namespace RealisticEMS
             var codes = kind.Length == 5 ? Ampds.Codes.Where(c => c.ToString().Replace("-", "") == kind).ToList()
                 : kind.Length == 2 && int.TryParse(kind, out var protocol) ? Ampds.Codes.Where(c => c.Protocol == protocol && c.Determinant != 0).ToList()
                 : null;
-            if (codes != null && codes.Count == 0) { Mod.log.Warn($"Debug: no Einsatzcode matches {kind}"); return; }
+            if (codes != null && codes.Count == 0) { Log.Warn($"debug: no call code matches kind={kind}"); return; }
             using var citizens = m_Healthy.ToEntityArray(Allocator.Temp);
             var rnd = new System.Random();
             for (int i = 0; i < count && citizens.Length > 0; i++)
@@ -157,7 +166,140 @@ namespace RealisticEMS
                 var e = EntityManager.CreateEntity(ComponentType.ReadWrite<Game.Common.Event>(), ComponentType.ReadWrite<Game.Events.AddHealthProblem>());
                 EntityManager.SetComponentData(e, new Game.Events.AddHealthProblem { m_Event = Entity.Null, m_Target = target, m_Flags = flags });
             }
-            Mod.log.Info($"Debug: {count} x {kind} call(s) raised from {citizens.Length} candidates");
+            Log.Info($"debug: raised calls count={count} kind={kind} candidates={citizens.Length}");
+        }
+
+        /// <summary>
+        /// Debug tab, fires: "selected" ignites the selected building, a FireAlarmSystem.Level name ignites a random
+        /// building of that level and jumps there, "alarm" escalates all scenes, "out" lets all fires die down.
+        /// </summary>
+        private void DebugFire(string kind)
+        {
+            if (!DebugUnlocked) return;
+            var alarms = World.GetOrCreateSystemManaged<FireAlarmSystem>();
+            if (kind == "alarm") { foreach (var b in FireAlarmSystem.Scenes.Keys) FireAlarmSystem.ForceEscalate.Add(b); return; }
+            if (kind == "out")
+            {
+                foreach (var b in FireAlarmSystem.Scenes.Keys)
+                {
+                    if (!EntityManager.TryGetComponent<Game.Events.OnFire>(b, out var f)) continue;
+                    f.m_Intensity = 0f; // vanilla FireSimulationSystem puts it out
+                    EntityManager.SetComponentData(b, f);
+                }
+                return;
+            }
+            if (kind == "selected")
+            {
+                var sel = World.GetExistingSystemManaged<SelectedInfoUISystem>()?.selectedEntity ?? Entity.Null;
+                if (!alarms.Ignite(sel)) Log.Warn($"fire_debug: selection {sel.Index} is not an intact building");
+                return;
+            }
+            if (!System.Enum.TryParse<FireAlarmSystem.Level>(kind, out var level)) { Log.Warn($"fire_debug: unknown kind={kind}"); return; }
+            using var q = EntityManager.CreateEntityQuery(ComponentType.ReadOnly<Building>(), ComponentType.ReadOnly<PrefabRef>(),
+                ComponentType.Exclude<Game.Events.OnFire>(), ComponentType.Exclude<Game.Common.Destroyed>(), ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>(),
+                ComponentType.Exclude<Game.Objects.Attached>());
+            using var all = q.ToEntityArray(Allocator.Temp);
+            var rnd = new System.Random();
+            for (int tries = 0; tries < 2000 && all.Length > 0; tries++)
+            {
+                var b = all[rnd.Next(all.Length)];
+                if (EntityManager.HasComponent<Owner>(b) || alarms.Classify(b) != level) continue; // sub-buildings belong to their main building
+                if (alarms.Ignite(b)) JumpTo(b.Index, b.Version);
+                return;
+            }
+            Log.Warn($"fire_debug: no building of level={level}");
+        }
+
+        /// <summary>
+        /// Debug tab, accidents: "selected" starts a vanilla traffic accident on the selected road segment (or the one the
+        /// selected vehicle drives on), "highway" on a random highway segment with cars on it, and jumps there. Same
+        /// event vanilla RoadSafetySystem creates: a TrafficAccident event targeting the road; vanilla picks the car.
+        /// </summary>
+        private void DebugAccident(string kind)
+        {
+            if (!DebugUnlocked) return;
+            if (kind == "clear") { HighwayCrashSystem.ClearAll = true; return; }
+            // "highway:Pileup" / "selected:Truck": crash class for the next highway crash ("Random" = by weight).
+            var parts = kind.Split(':');
+            kind = parts[0];
+            HighwayCrashSystem.NextKind = parts.Length > 1 && System.Enum.TryParse<HighwayCrashSystem.Kind>(parts[1], out var k) ? k : (HighwayCrashSystem.Kind?)null;
+            var em = EntityManager;
+            Entity edge = Entity.Null;
+            if (kind == "selected")
+            {
+                var sel = World.GetExistingSystemManaged<SelectedInfoUISystem>()?.selectedEntity ?? Entity.Null;
+                if (em.HasComponent<Game.Net.Edge>(sel)) edge = sel;
+                else if (em.TryGetComponent<CarCurrentLane>(sel, out var cl) && em.TryGetComponent<Owner>(cl.m_Lane, out var o) && em.HasComponent<Game.Net.Edge>(o.m_Owner)) edge = o.m_Owner;
+                if (edge == Entity.Null || !HasCars(edge)) { Log.Warn($"accident_debug: selection {sel.Index} is no road segment with cars on it"); return; }
+            }
+            else
+            {
+                using var q = em.CreateEntityQuery(ComponentType.ReadOnly<Game.Net.Edge>(), ComponentType.ReadOnly<Game.Net.Road>(), ComponentType.ReadOnly<PrefabRef>(),
+                    ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
+                using var all = q.ToEntityArray(Allocator.Temp);
+                var rnd = new System.Random();
+                for (int tries = 0; tries < 5000 && all.Length > 0 && edge == Entity.Null; tries++)
+                {
+                    var e = all[rnd.Next(all.Length)];
+                    if (em.TryGetComponent<RoadData>(em.GetComponentData<PrefabRef>(e).m_Prefab, out var rd) && (rd.m_Flags & Game.Prefabs.RoadFlags.UseHighwayRules) != 0 && HasCars(e)) edge = e;
+                }
+                if (edge == Entity.Null) { Log.Warn("accident_debug: no highway segment with cars"); return; }
+            }
+            var prefab = Entity.Null;
+            using (var pq = em.CreateEntityQuery(ComponentType.ReadOnly<EventData>(), ComponentType.ReadOnly<TrafficAccidentData>(), ComponentType.Exclude<Locked>()))
+            using (var prefabs = pq.ToEntityArray(Allocator.Temp))
+                foreach (var p in prefabs)
+                    if (em.GetComponentData<TrafficAccidentData>(p).m_RandomSiteType == Game.Prefabs.EventTargetType.Road) { prefab = p; break; }
+            if (prefab == Entity.Null) { Log.Warn("accident_debug: no road accident event prefab"); return; }
+            using var created = new NativeArray<Entity>(1, Allocator.Temp); // array overload, see NefDispatchSystem.Spawn
+            em.CreateEntity(em.GetComponentData<EventData>(prefab).m_Archetype, created);
+            var ev = created[0];
+            em.SetComponentData(ev, new PrefabRef(prefab));
+            em.GetBuffer<Game.Events.TargetElement>(ev).Add(new Game.Events.TargetElement(edge));
+            Log.Info($"accident_debug kind={kind} edge={edge.Index} event={ev.Index}");
+            JumpTo(edge.Index, edge.Version);
+        }
+
+        /// <summary>A car drives on one of the segment's lanes (vanilla needs one to crash).</summary>
+        private bool HasCars(Entity edge)
+        {
+            var em = EntityManager;
+            if (!em.TryGetBuffer<Game.Net.SubLane>(edge, true, out var lanes)) return false;
+            foreach (var l in lanes)
+                if (em.HasComponent<Game.Net.CarLane>(l.m_SubLane) && em.TryGetBuffer<Game.Net.LaneObject>(l.m_SubLane, true, out var objs) && objs.Length > 0) return true;
+            return false;
+        }
+
+        // Debug tab, arrow board: selected road maintenance truck -> signal animation step (0 off, 1, 2, 3 = both flags).
+        private Entity m_SignCar;
+        private int m_SignStep;
+        private static readonly CarFlags SignalMask = CarFlags.SignalAnimation1 | CarFlags.SignalAnimation2;
+
+        /// <summary>Cycles the selected road maintenance truck's arrow board: off, SignalAnimation1, 2, both. Vanilla
+        /// clears the flags when the truck is not working, so OnUpdate reapplies them every frame.</summary>
+        private void DebugSign()
+        {
+            if (!DebugUnlocked) return;
+            var sel = World.GetExistingSystemManaged<SelectedInfoUISystem>()?.selectedEntity ?? Entity.Null;
+            if (sel == Entity.Null || !EntityManager.HasComponent<Game.Vehicles.MaintenanceVehicle>(sel) || !EntityManager.HasComponent<Car>(sel))
+            { Log.Warn($"sign_debug: selection {sel.Index} is not a maintenance truck"); return; }
+            m_SignStep = sel == m_SignCar ? (m_SignStep + 1) % 4 : 1;
+            m_SignCar = sel;
+            ApplySign();
+            Log.Info($"sign_debug car={sel.Index} step={m_SignStep}");
+        }
+
+        private void ApplySign()
+        {
+            if (m_SignCar == Entity.Null) return;
+            if (!EntityManager.TryGetComponent<Car>(m_SignCar, out var c)) { m_SignCar = Entity.Null; return; }
+            var want = (c.m_Flags & ~SignalMask) | (m_SignStep == 0 ? 0 : CarFlags.Working)
+                | ((m_SignStep & 1) != 0 ? CarFlags.SignalAnimation1 : 0) | ((m_SignStep & 2) != 0 ? CarFlags.SignalAnimation2 : 0);
+            if (want == c.m_Flags) return;
+            c.m_Flags = want;
+            EntityManager.SetComponentData(m_SignCar, c);
+            if (!EntityManager.HasComponent<EffectsUpdated>(m_SignCar)) EntityManager.AddComponent<EffectsUpdated>(m_SignCar);
+            if (m_SignStep == 0) m_SignCar = Entity.Null;
         }
 
         /// <summary>Settings page: every writable bool/int/enum of Setting, with slider bounds. Labels come from the locale IDs.
@@ -198,7 +340,7 @@ namespace RealisticEMS
                 return;
             }
             var p =EditableSettings().FirstOrDefault(x => x.Name == name);
-            if (p == null) { Mod.log.Warn($"Settings: unknown option {name}"); return; }
+            if (p == null) { Log.Warn($"Settings: unknown option {name}"); return; }
             var slider = (Game.Settings.SettingsUISliderAttribute)System.Attribute.GetCustomAttribute(p, typeof(Game.Settings.SettingsUISliderAttribute));
             if (slider != null) value = math.clamp(value, (int)slider.min, (int)slider.max);
             p.SetValue(Mod.Setting, p.PropertyType == typeof(bool) ? (object)(value != 0) : value);
@@ -209,6 +351,7 @@ namespace RealisticEMS
         protected override void OnUpdate()
         {
             base.OnUpdate();
+            ApplySign();
             uint now = m_Sim.frameIndex;
             if (now - m_LastTrack >= TrackFrames) { m_LastTrack = now; Track(now); }
             if (now - m_LastSample >= SampleFrames) { m_LastSample = now; Sample(); }
@@ -304,6 +447,7 @@ namespace RealisticEMS
         {
             if (parked) return (a.m_State & AmbulanceFlags.Disabled) != 0 ? "ausser Dienst" : "frei";
             if ((a.m_State & AmbulanceFlags.Transporting) != 0) return "Transport";
+            if (ResponderDispatchSystem.HeldAt.ContainsKey(e)) return "am Einsatzort"; // fire standby: vanilla marked it returning before the hold
             if ((a.m_State & AmbulanceFlags.Dispatched) != 0) return (a.m_State & AmbulanceFlags.AtTarget) != 0 || OnSceneCareSystem.OnScene(em, e) ? "am Einsatzort" : "Anfahrt";
             if ((a.m_State & AmbulanceFlags.Returning) != 0) return "Rückfahrt";
             return "unterwegs";
@@ -320,17 +464,17 @@ namespace RealisticEMS
             return "Streife";
         }
 
-        private (List<(Entity e, Ambulance a, Entity owner, string status)> rows, List<(Entity e, int used, int beds, bool accepts)> hospitals, List<Entity> depots) Collect()
+        private (List<(Entity e, Ambulance a, Entity owner, string status, bool nef)> rows, List<(Entity e, int used, int beds, bool accepts)> hospitals, List<Entity> depots) Collect()
         {
             var em = EntityManager;
             using var amb = m_Ambulances.ToEntityArray(Allocator.Temp);
             using var hosp = m_Hospitals.ToEntityArray(Allocator.Temp);
 
-            var rows = new List<(Entity e, Ambulance a, Entity owner, string status)>();
+            var rows = new List<(Entity e, Ambulance a, Entity owner, string status, bool nef)>();
             foreach (var e in amb)
             {
                 var a = em.GetComponentData<Ambulance>(e);
-                rows.Add((e, a, em.GetComponentData<Owner>(e).m_Owner, Status(em, e, a, em.HasComponent<ParkedCar>(e))));
+                rows.Add((e, a, em.GetComponentData<Owner>(e).m_Owner, Status(em, e, a, em.HasComponent<ParkedCar>(e)), NefDispatchSystem.IsNef(em, e)));
             }
             var hospitals = new List<(Entity e, int used, int beds, bool accepts)>();
             var depots = new List<Entity>();
@@ -349,6 +493,17 @@ namespace RealisticEMS
 
         /// <summary>Can take a new call: parked, on patrol, or returning when AvailableOnlyAtDepot is off.</summary>
         private static bool Available(string status) => status == "frei" || status == "Streife" || (status == "Rückfahrt" && !Mod.Setting.AvailableOnlyAtDepot);
+
+        /// <summary>Call id (patient index, 0 = none) plus entity id for jumpTo, as on ems.Vehicle.</summary>
+        private void WriteCallLink(IJsonWriter w, Entity car)
+        {
+            var patient = m_Responders.PatientOf(car);
+            Prop(w, "call", patient.Index);
+            var info = CallInfo(patient); Prop(w, "callNo", info.no); Prop(w, "address", info.addr);
+            ResponderDispatchSystem.CodeByPatient.TryGetValue(patient, out var code);
+            Prop(w, "code", code?.ToString() ?? ""); Prop(w, "level", code != null ? code.Level.ToString()[0].ToString() : ""); Prop(w, "reason", code?.Reason ?? "");
+            Prop(w, "id", car.Index); Prop(w, "ver", car.Version);
+        }
 
         private string FireStatus(Entity e)
         {
@@ -371,7 +526,11 @@ namespace RealisticEMS
         {
             var em = EntityManager;
             var (rows, hospitals, depots) = Collect();
-            var rtws = rows.Where(r => !NefDispatchSystem.IsNef(em, r.e)).ToList(); // overview counts ambulances only
+            var rtws = rows.Where(r => !r.nef).ToList(); // overview counts ambulances only
+            var perOwner = new Dictionary<Entity, int>();
+            foreach (var r in rows) perOwner[r.owner] = (perOwner.TryGetValue(r.owner, out var n) ? n : 0) + 1;
+            var patientOfNef = new Dictionary<Entity, Entity>(); // reverse of NefByPatient, first entry wins like FirstOrDefault
+            foreach (var kv in NefDispatchSystem.NefByPatient) if (kv.Value != Entity.Null && !patientOfNef.ContainsKey(kv.Value)) patientOfNef[kv.Value] = kv.Key;
             int free = rtws.Count(r => r.status == "frei");
             int onCall = rtws.Count(r => OnCall(r.status));
             int returning = rtws.Count(r => r.status == "Rückfahrt");
@@ -396,10 +555,10 @@ namespace RealisticEMS
                 Prop(w, "reason", hasCode ? code.Reason : "");
                 Prop(w, "units", hasCode ? code.UnitsText() : "");
                 Prop(w, "destination", r.status == "Transport" ? Name(em.GetComponentData<Target>(r.e).m_Target) : "");
-                bool nef = NefDispatchSystem.IsNef(em, r.e);
+                bool nef = r.nef;
                 // Call id = patient entity index; a NEF is linked through NefDispatchSystem. 0 = no call.
                 var patient = r.a.m_TargetPatient;
-                if (patient == Entity.Null && nef) patient = NefDispatchSystem.NefByPatient.FirstOrDefault(kv => kv.Value == r.e).Key;
+                if (patient == Entity.Null && nef) patientOfNef.TryGetValue(r.e, out patient);
                 if (patient == Entity.Null) patient = HelicopterSystem.PatientOf(r.e); // rescue heli flying in (no m_TargetPatient yet)
                 Prop(w, "call", patient.Index);
                 var info = CallInfo(patient); Prop(w, "callNo", info.no); Prop(w, "address", info.addr);
@@ -413,7 +572,7 @@ namespace RealisticEMS
             {
                 w.TypeBegin("ems.Hospital");
                 Prop(w, "name", Name(h.e)); Prop(w, "used", h.used); Prop(w, "beds", h.beds); Prop(w, "accepts", h.accepts);
-                Prop(w, "ambulances", rows.Count(r => r.owner == h.e)); Pos(w, h.e);
+                Prop(w, "ambulances", perOwner.TryGetValue(h.e, out var owned) ? owned : 0); Pos(w, h.e);
                 w.TypeEnd();
             }
             w.ArrayEnd();
@@ -421,7 +580,7 @@ namespace RealisticEMS
             // One row per building and vehicle kind: rtw / nef (depots and hospitals), police, fire.
             using var police = m_Police.ToEntityArray(Allocator.Temp);
             using var fire = m_Fire.ToEntityArray(Allocator.Temp);
-            var stations = rows.GroupBy(r => (r.owner, kind: NefDispatchSystem.IsNef(em, r.e) ? "nef" : "rtw"))
+            var stations = rows.GroupBy(r => (r.owner, kind: r.nef ? "nef" : "rtw"))
                 .Select(g => (g.Key.owner, g.Key.kind, statuses: g.Select(r => r.status).ToList()))
                 .Concat(police.Where(p => !NefDispatchSystem.IsNef(em, p)).GroupBy(p => em.GetComponentData<Owner>(p).m_Owner)
                     .Select(g => (owner: g.Key, kind: "police", statuses: g.Select(p => PoliceStatus(em, p, em.GetComponentData<PoliceCar>(p), em.HasComponent<ParkedCar>(p))).ToList())))
@@ -438,7 +597,22 @@ namespace RealisticEMS
                 w.TypeBegin("ems.Police");
                 Prop(w, "callsign", m_Units.CallsignOf(p));
                 Prop(w, "status", PoliceStatus(em, p, em.GetComponentData<PoliceCar>(p), em.HasComponent<ParkedCar>(p)));
-                Prop(w, "station", Name(em.GetComponentData<Owner>(p).m_Owner)); Pos(w, p);
+                Prop(w, "station", Name(em.GetComponentData<Owner>(p).m_Owner));
+                WriteCallLink(w, p); Pos(w, p);
+                w.TypeEnd();
+            }
+            w.ArrayEnd();
+
+            // Fire engines on a call only (the map shows no fire markers): joined to their call in the Einsätze tab.
+            var fireOnCall = fire.Where(f => m_Responders.PatientOf(f) != Entity.Null).ToList();
+            w.PropertyName("fire"); w.ArrayBegin((uint)fireOnCall.Count);
+            foreach (var f in fireOnCall)
+            {
+                w.TypeBegin("ems.Fire");
+                Prop(w, "callsign", m_Units.CallsignOf(f));
+                Prop(w, "status", FireStatus(f));
+                Prop(w, "station", Name(em.GetComponentData<Owner>(f).m_Owner));
+                WriteCallLink(w, f); Pos(w, f);
                 w.TypeEnd();
             }
             w.ArrayEnd();
@@ -529,7 +703,7 @@ namespace RealisticEMS
                 }
                 if (d.since != 0 && OnSceneCareSystem.OnScene(em, e))
                 {
-                    m_Response.Add((int)math.round((now - d.since) / OnSceneCareSystem.DriveFramesPerMinute));
+                    m_Response.Add((int)math.round((now - d.since) / OnSceneCareSystem.FramesPerGameMinute));
                     if (m_Response.Count > ResponseLength) m_Response.RemoveAt(0);
                     d.since = 0;
                 }
@@ -544,9 +718,8 @@ namespace RealisticEMS
 
         private void Sample()
         {
-            var em = EntityManager;
             var (rows, hospitals, _) = Collect();
-            var rtws = rows.Where(r => !NefDispatchSystem.IsNef(em, r.e)).ToList();
+            var rtws = rows.Where(r => !r.nef).ToList();
             m_History.Enqueue(new[] { rtws.Count(r => OnCall(r.status)), rtws.Count(r => r.status == "Rückfahrt"), rtws.Count,
                 hospitals.Sum(h => h.used), hospitals.Sum(h => h.beds), m_SampleCalls }.Concat(m_SampleLevels).ToArray());
             m_SampleCalls = 0; System.Array.Clear(m_SampleLevels, 0, m_SampleLevels.Length);

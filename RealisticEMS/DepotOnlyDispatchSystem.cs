@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Game;
 using Game.Buildings;
 using Game.Common;
@@ -31,15 +32,21 @@ namespace RealisticEMS
 
         protected override void OnUpdate()
         {
-            // ponytail: "any depot exists" is city-wide; per-district coverage would need ServiceDistrict checks.
             if (!Mod.Setting.OnlyDepotsDispatch || m_DepotQuery.IsEmpty) return;
+            // Per road area (RoadReachSystem): a hospital stops sending only if a depot can reach its area by road.
+            // A hospital on an island without a depot keeps its ambulances.
+            var reach = World.GetOrCreateSystemManaged<RoadReachSystem>();
+            var depotAreas = new HashSet<Entity>();
+            using (var depots = m_DepotQuery.ToEntityArray(Allocator.Temp)) foreach (var d in depots) depotAreas.Add(reach.AreaOf(d));
+            bool Covered(Entity building) { var a = reach.AreaOf(building); return a == Entity.Null || depotAreas.Contains(a); }
 
+            using var hospitalEntities = m_HospitalQuery.ToEntityArray(Allocator.Temp);
             var hospitals = m_HospitalQuery.ToComponentDataArray<Hospital>(Allocator.Temp);
             bool changed = false;
             for (int i = 0; i < hospitals.Length; i++)
             {
                 var h = hospitals[i];
-                if ((h.m_Flags & HospitalFlags.HasAvailableAmbulances) == 0) continue;
+                if ((h.m_Flags & HospitalFlags.HasAvailableAmbulances) == 0 || !Covered(hospitalEntities[i])) continue;
                 h.m_Flags &= ~HospitalFlags.HasAvailableAmbulances;
                 hospitals[i] = h;
                 changed = true;
@@ -52,7 +59,7 @@ namespace RealisticEMS
             for (int i = 0; i < parked.Length; i++)
             {
                 var a = parked[i];
-                if ((a.m_State & AmbulanceFlags.Disabled) != 0 || !EntityManager.HasBuffer<Patient>(owners[i].m_Owner)) continue;
+                if ((a.m_State & AmbulanceFlags.Disabled) != 0 || !EntityManager.HasBuffer<Patient>(owners[i].m_Owner) || !Covered(owners[i].m_Owner)) continue;
                 a.m_State |= AmbulanceFlags.Disabled;
                 parked[i] = a;
                 changed = true;

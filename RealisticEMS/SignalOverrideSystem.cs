@@ -12,11 +12,15 @@ namespace RealisticEMS
     /// </summary>
     public partial class SignalOverrideSystem : GameSystemBase
     {
+        private readonly List<Entity> m_Keys = new List<Entity>();
+
         protected override void OnUpdate()
         {
             var forced = EmergencyLaneSystem.ForcedGreen;
             if (forced.Count == 0) return;
-            foreach (var lane in new List<Entity>(forced.Keys))
+            m_Keys.Clear();
+            m_Keys.AddRange(forced.Keys);
+            foreach (var lane in m_Keys)
             {
                 if (--forced[lane] <= 0 || !EntityManager.Exists(lane) || !EntityManager.HasComponent<LaneSignal>(lane)) { forced.Remove(lane); continue; }
                 var sig = EntityManager.GetComponentData<LaneSignal>(lane);

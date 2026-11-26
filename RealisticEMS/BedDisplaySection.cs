@@ -13,8 +13,12 @@ namespace RealisticEMS
     /// </summary>
     public partial class BedDisplaySection : HealthcareSection
     {
-        private static int Get(object o, string prop) =>
-            (int)typeof(HealthcareSection).GetProperty(prop, BindingFlags.NonPublic | BindingFlags.Instance).GetValue(o);
+        private static readonly Dictionary<string, PropertyInfo> s_Props = new Dictionary<string, PropertyInfo>();
+        private static int Get(object o, string prop)
+        {
+            if (!s_Props.TryGetValue(prop, out var p)) s_Props[prop] = p = typeof(HealthcareSection).GetProperty(prop, BindingFlags.NonPublic | BindingFlags.Instance);
+            return (int)p.GetValue(o);
+        }
 
         /// <summary>Swaps the vanilla section in whichever section list holds it.</summary>
         public static void Install(World world)
@@ -27,7 +31,7 @@ namespace RealisticEMS
                 int i = list.FindIndex(s => s?.GetType() == typeof(HealthcareSection));
                 if (i >= 0) { list[i] = mine; return; }
             }
-            Mod.log.Warn("HealthcareSection not found, building panel shows the unmodified bed capacity");
+            Log.Warn("HealthcareSection not found, building panel shows the unmodified bed capacity");
         }
 
         public override void OnWriteProperties(IJsonWriter writer)

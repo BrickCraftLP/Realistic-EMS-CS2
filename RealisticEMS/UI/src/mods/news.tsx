@@ -16,6 +16,43 @@ type Entry = { v: string; en: Section[]; de: Section[] };
 // Newest first. Keep only the last 3 here; older ones live on GitHub. When adding a version, also bump Mod.Version (Mod.cs).
 const LOG: Entry[] = ([
     {
+        v: "26.0.3b",
+        en: [
+            { kind: "new", items: [
+                "Fire alarm levels: more engines and police, scaled by building and street. Still burning? Next alarm. Police hold the scene as long as it burns.",
+                "Street closed at fires: through traffic detours, responders still get in.",
+                "Highway crashes: from rear-end to pileup, with closed lanes, police and road maintenance.",
+                "Rescue helicopter (experimental): doctor and patient flights. Lands on sports fields, police drive the doctor. Island clinics fly out critical patients.",
+                "Ambulance Station: a small base for one unit, listed with the clinic.",
+                "Station options: ambulances with a doctor (NAW), a NEF at the fire station, and the fire brigade livery for their ambulances.",
+                "Road reach: no units are sent across the water.",
+                "The building panel shows your bed slider.",
+            ] },
+            { kind: "fixed", items: [
+                "NEFs and helicopters no longer pull ambulances off a call.",
+                "Highway Rettungsgasse is wider and steadier.",
+                "Smoother frame rates in big cities.",
+            ] },
+        ],
+        de: [
+            { kind: "new", items: [
+                "Brandalarm-Stufen: mehr Löschfahrzeuge und Polizei, je nach Gebäude und Straße. Brennt es noch? Nächste Alarmstufe. Die Polizei bleibt, solange es brennt.",
+                "Straßensperre bei Bränden: Durchgangsverkehr fährt außen herum, Einsatzkräfte kommen durch.",
+                "Unfälle auf der Autobahn: vom Auffahrunfall bis zur Massenkarambolage, mit gesperrten Spuren, Polizei und Straßendienst.",
+                "Rettungshubschrauber (experimentell): Notarzt- und Patientenflüge. Landet auf Sportplätzen, die Polizei bringt den Notarzt. Kliniken auf Inseln fliegen kritische Patienten aus.",
+                "Rettungsstelle: kleine Wache für eine Einheit, bei der Klinik gelistet.",
+                "Wachen-Optionen: RTW mit Notarzt (NAW), ein NEF an der Feuerwache und die Feuerwehr-Lackierung für deren RTW.",
+                "Straßenerreichbarkeit: keine Einheiten über das Wasser.",
+                "Das Gebäudefenster zeigt deinen Betten-Regler.",
+            ] },
+            { kind: "fixed", items: [
+                "NEF und Hubschrauber ziehen keine RTW mehr aus dem Einsatz.",
+                "Rettungsgasse auf der Autobahn ist breiter und stabiler.",
+                "Flüssigere Bildraten in großen Städten.",
+            ] },
+        ],
+    },
+    {
         v: "26.0.2b",
         en: [
             { kind: "new", items: [
@@ -148,22 +185,27 @@ function mountBug(root: HTMLElement) {
         el.setAttribute("stroke-dasharray", `${p * len} ${len}`);
         el.setAttribute("opacity", p > 0 ? "1" : "0");
     };
+    const card = q(".ncard"), bug = q(".bug"), o = q(".o"), od = q(".od"), ok = q(".ok"), tick = q(".tick");
+    const chips = Array.from(root.querySelectorAll(".lchip"));
     const t0 = performance.now();
-    let raf = 0;
+    let raf = 0, settled = false;
     const frame = () => {
         const t = (performance.now() - t0) / 1000;
-        q(".ncard").setAttribute("opacity", String(clamp(t / 0.4)));
         const walking = t < 1.5;
         const x = -60 + 170 * EO((t - 0.1) / 1.4);
         const y = 150 - (t > 1.6 ? Math.abs(Math.sin((t - 1.6) * 2.2)) * 8 : Math.sin(t * 14) * 2);
-        q(".bug").setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+        bug.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
         legs.forEach((l, i) => l.setAttribute("transform", `translate(${(Math.sin(t * (walking ? 20 : 4) + i * 1.6) * (walking ? 4 : 1.2)).toFixed(2)} 0)`));
-        draw(q(".o"), 88, clamp((t - 1.5) / 0.5));
-        q(".od").setAttribute("opacity", t > 1.9 ? "1" : "0");
-        lines.forEach(([el, len, at]) => draw(el, len, clamp((t - at) / 0.5)));
-        root.querySelectorAll(".lchip").forEach(c => c.setAttribute("opacity", String(clamp((t - 3.7) / 0.4))));
-        draw(q(".ok"), 138, clamp((t - 4.3) / 0.5));
-        draw(q(".tick"), 40, clamp((t - 4.8) / 0.35));
+        if (!settled) { // everything but the idle bug reaches its end state by 5.15 s; one pass past that, then idle
+            settled = t >= 5.2;
+            card.setAttribute("opacity", String(clamp(t / 0.4)));
+            draw(o, 88, clamp((t - 1.5) / 0.5));
+            od.setAttribute("opacity", t > 1.9 ? "1" : "0");
+            lines.forEach(([el, len, at]) => draw(el, len, clamp((t - at) / 0.5)));
+            chips.forEach(c => c.setAttribute("opacity", String(clamp((t - 3.7) / 0.4))));
+            draw(ok, 138, clamp((t - 4.3) / 0.5));
+            draw(tick, 40, clamp((t - 4.8) / 0.35));
+        }
         raf = requestAnimationFrame(frame);
     };
     frame();
@@ -209,7 +251,10 @@ export const EmsNews = () => {
                         ))}
                         <div className="older">
                             <span>{T.older}</span>
-                            <button className="chip" onClick={() => trigger("realisticEMS", "openReleases")}>{T.releases}</button>
+                            <div style={{ display: "flex", flexDirection: "row" }}>
+                                <button className="chip" onClick={() => trigger("realisticEMS", "openReleases")}>{T.releases}</button>
+                                <button className="chip" style={{ marginLeft: "8rem" }} onClick={() => trigger("realisticEMS", "openDiscord")}>Discord</button>
+                            </div>
                         </div>
                     </div>
                 ) : (

@@ -21,11 +21,15 @@ namespace RealisticEMS
     {
         private const AmbulanceFlags Mask = AmbulanceFlags.Returning | AmbulanceFlags.Dispatched | AmbulanceFlags.Transporting | AmbulanceFlags.Disabled;
         private EntityQuery m_Query;
+        private HelicopterSystem m_Heli;
+        private HospitalSelectionSystem m_Hospitals;
         private Dictionary<Entity, AmbulanceFlags> m_LastState = new Dictionary<Entity, AmbulanceFlags>();
 
         protected override void OnCreate()
         {
             base.OnCreate();
+            m_Heli = World.GetOrCreateSystemManaged<HelicopterSystem>();
+            m_Hospitals = World.GetOrCreateSystemManaged<HospitalSelectionSystem>();
             // PathOwner = moving vehicle; parked ambulances lose it in ParkCar.
             m_Query = GetEntityQuery(ComponentType.ReadWrite<Ambulance>(), ComponentType.ReadOnly<PathOwner>(), ComponentType.ReadOnly<Owner>(), ComponentType.ReadOnly<Target>(),
                 ComponentType.Exclude<Deleted>(), ComponentType.Exclude<Temp>());
@@ -71,11 +75,16 @@ namespace RealisticEMS
                 if (!em.Exists(e) || em.HasComponent<Deleted>(e)) { m_Borrowed.Remove(e); continue; }
                 if ((em.GetComponentData<Ambulance>(e).m_State & AmbulanceFlags.Transporting) != 0) continue; // still delivering
                 m_Borrowed.Remove(e);
-                if (!em.Exists(home)) { em.AddComponent<Deleted>(e); continue; }
+                if (!em.Exists(home)) // depot demolished: stays with the hospital that lent it; deleting a driving car crashes natively
+                {
+                    if (em.HasComponent<ParkedCar>(e)) em.AddComponent<Deleted>(e);
+                    Log.Debug($"ambulance={e.Index} depot={home.Index} gone, staying with current owner");
+                    continue;
+                }
                 SetOwner(e, home);
                 if (em.HasComponent<ParkedCar>(e)) { em.AddComponent<Deleted>(e); continue; } // parked at the hospital: depot spawns a fresh one
                 Retarget(e, home);
-                Mod.log.Info($"Ambulance {e.Index}: patient delivered, back to depot {home.Index}");
+                Log.Debug($"ambulance={e.Index} patient delivered, returning to depot={home.Index}");
             }
         }
 
@@ -85,7 +94,7 @@ namespace RealisticEMS
             using var entities = m_Query.ToEntityArray(Allocator.Temp);
             var ambulances = m_Query.ToComponentDataArray<Ambulance>(Allocator.Temp);
             bool changed = false;
-            bool log = Mod.Setting.LogAmbulanceStates;
+            bool log = Log.Enabled(LogLevel.Debug);
             var seen = log ? new Dictionary<Entity, AmbulanceFlags>(entities.Length) : null;
 
             for (int i = 0; i < ambulances.Length; i++)
@@ -96,7 +105,7 @@ namespace RealisticEMS
                 // Handed its patient to the rescue helicopter: unavailable until back at base, whatever the setting says.
                 // Medical helicopters (rescue helicopter on): never pick up ordinary calls on the way home either.
                 if ((Mod.Setting.AvailableOnlyAtDepot || HelicopterSystem.HandedOver.Contains(entities[i])
-                     || Mod.Setting.EnableHelicopter && EntityManager.HasComponent<Game.Vehicles.Helicopter>(entities[i]))
+                     || EntityManager.HasComponent<Game.Vehicles.Helicopter>(entities[i]))
                     && (a.m_State & Mask) == AmbulanceFlags.Returning)
                 {
                     a.m_State |= AmbulanceFlags.Disabled;
@@ -105,7 +114,8 @@ namespace RealisticEMS
                 }
                 // Heading home without a critical patient: no blue lights (vanilla only re-evaluates them on a new path).
                 const AmbulanceFlags urgent = AmbulanceFlags.Transporting | AmbulanceFlags.Critical;
-                if ((a.m_State & AmbulanceFlags.Returning) != 0 && (a.m_State & urgent) != urgent && EntityManager.HasComponent<Car>(entities[i]))
+                if ((a.m_State & AmbulanceFlags.Returning) != 0 && (a.m_State & urgent) != urgent && EntityManager.HasComponent<Car>(entities[i])
+                    && !ResponderDispatchSystem.HeldAt.ContainsKey(entities[i])) // fire standby: lights stay on while held
                 {
                     var car = EntityManager.GetComponentData<Car>(entities[i]);
                     if ((car.m_Flags & CarFlags.Emergency) != 0)
@@ -127,19 +137,19 @@ namespace RealisticEMS
                 {
                     // No road to any hospital (e.g. island): the rescue helicopter takes the patient, if one can come.
                     // Only queued here: spawning inside this loop would break CopyFromComponentDataArray below.
-                    if (World.GetExistingSystemManaged<HelicopterSystem>().TryNoRouteHandover(ent, a.m_TargetPatient)) continue;
+                    if (m_Heli.TryNoRouteHandover(ent, a.m_TargetPatient)) continue;
                     int attempt = m_Attempts.TryGetValue(ent, out var n) ? n + 1 : 1;
                     m_Attempts[ent] = attempt;
                     if (attempt == 1)
                     {
-                        World.GetExistingSystemManaged<HospitalSelectionSystem>().Suspend(256);
+                        m_Hospitals.Suspend(256);
                         a.m_State = (a.m_State & ~AmbulanceFlags.Returning) | AmbulanceFlags.FindHospital;
                         ambulances[i] = a;
                         changed = true;
                         // Keep the (valid) current target: AmbulanceAISystem aborts on a null target before the new
                         // hospital path arrives. FindHospital makes the next path search a hospital search anyway.
                         Retarget(ent, EntityManager.GetComponentData<Target>(ent).m_Target);
-                        Mod.log.Info($"Ambulance {ent.Index}: hospital search failed, retrying without full-hospital filter");
+                        Log.Debug($"ambulance={ent.Index} hospital search failed, retrying without full-hospital filter");
                     }
                     else if (attempt == 2)
                     {
@@ -150,9 +160,9 @@ namespace RealisticEMS
                             m_Borrowed[ent] = EntityManager.GetComponentData<Owner>(ent).m_Owner;
                             SetOwner(ent, hospital);
                             Retarget(ent, hospital); // stays Returning|Transporting: vanilla "return home" = deliver here
-                            Mod.log.Info($"Ambulance {ent.Index}: no hospital found by pathfind, delivers patient to hospital {hospital.Index} as temporary home");
+                            Log.Debug($"ambulance={ent.Index} pathfind found no hospital, delivering to hospital={hospital.Index} as temporary home");
                         }
-                        else Mod.log.Warn($"Ambulance {ent.Index}: no hospital in the city can treat patient {a.m_TargetPatient.Index}");
+                        else Log.Warn($"ambulance={ent.Index} no hospital in the city can treat patient={a.m_TargetPatient.Index}");
                     }
                     // attempt >= 3: give up, vanilla takes over (logged once above)
                 }
@@ -164,8 +174,8 @@ namespace RealisticEMS
                     seen[e] = state;
                     if (!m_LastState.TryGetValue(e, out var prev) || prev != state)
                     {
-                        Mod.log.Info($"Ambulance {e.Index}: {prev} -> {state} | depot {EntityManager.GetComponentData<Owner>(e).m_Owner.Index}" +
-                                     $" target {EntityManager.GetComponentData<Target>(e).m_Target.Index} patient {a.m_TargetPatient.Index}");
+                        Log.Debug($"ambulance={e.Index} state {prev} -> {state} depot={EntityManager.GetComponentData<Owner>(e).m_Owner.Index}" +
+                                     $" target={EntityManager.GetComponentData<Target>(e).m_Target.Index} patient={a.m_TargetPatient.Index}");
                         const AmbulanceFlags busy = AmbulanceFlags.Dispatched | AmbulanceFlags.Transporting;
                         if ((prev & AmbulanceFlags.Dispatched) != 0 && (state & busy) == 0 && m_LastCall.TryGetValue(e, out var call) && !NefDispatchSystem.IsNef(EntityManager, e))
                             LogLostCall(e, call.patient, call.target);
@@ -205,13 +215,13 @@ namespace RealisticEMS
             if (em.HasComponent<Game.Citizens.HealthProblem>(patient))
             {
                 var h = em.GetComponentData<Game.Citizens.HealthProblem>(patient);
-                hp = $"{h.m_Flags}, Anfrage {h.m_HealthcareRequest.Index} existiert {em.Exists(h.m_HealthcareRequest)}";
+                hp = $"health={h.m_Flags} request={h.m_HealthcareRequest.Index} request_exists={em.Exists(h.m_HealthcareRequest)}";
             }
             var building = em.HasComponent<Game.Citizens.CurrentBuilding>(patient) ? em.GetComponentData<Game.Citizens.CurrentBuilding>(patient).m_CurrentBuilding : Entity.Null;
             var transport = em.HasComponent<Game.Citizens.CurrentTransport>(patient) ? em.GetComponentData<Game.Citizens.CurrentTransport>(patient).m_CurrentTransport : Entity.Null;
-            Mod.log.Warn($"EINSATZ VERLOREN {e.Index} ({OwnerKind(em, owner)} {owner.Index}): Patient {patient.Index} Ziel {target.Index} Abstand {dist:0} m, " +
-                         $"war vor Ort {arrive != 0}, Dispatches {dispatches} | {hp} | im Zielgebäude {building == target} (Gebäude {building.Index}), unterwegs {transport.Index} | " +
-                         $"Pfad {em.GetComponentData<PathOwner>(e).m_State} | {em.GetComponentData<Ambulance>(e).m_State}");
+            Log.Warn($"call lost ambulance={e.Index} owner={OwnerKind(em, owner)}:{owner.Index} patient={patient.Index} target={target.Index} distance={dist:0}m " +
+                         $"was_on_scene={arrive != 0} dispatches={dispatches} {hp} in_target_building={building == target} building={building.Index} transport={transport.Index} " +
+                         $"path={em.GetComponentData<PathOwner>(e).m_State} state={em.GetComponentData<Ambulance>(e).m_State}");
         }
 
         /// <summary>Diagnostic: an ambulance left the moving-vehicle query (deleted, parked or not spawned yet).</summary>
@@ -221,10 +231,10 @@ namespace RealisticEMS
             bool hadCall = m_LastCall.TryGetValue(e, out var call);
             m_LastCall.Remove(e);
             if (!hadCall && (last & AmbulanceFlags.Dispatched) == 0) return; // normal return to the depot
-            string how = !em.Exists(e) ? "existiert nicht mehr" : em.HasComponent<Deleted>(e) ? "gelöscht" : em.HasComponent<ParkedCar>(e) ? "geparkt"
-                : em.HasComponent<TripSource>(e) || em.HasComponent<Unspawned>(e) ? "nicht gestartet (TripSource/Unspawned)" : "andere Komponenten";
+            string how = !em.Exists(e) ? "gone" : em.HasComponent<Deleted>(e) ? "deleted" : em.HasComponent<ParkedCar>(e) ? "parked"
+                : em.HasComponent<TripSource>(e) || em.HasComponent<Unspawned>(e) ? "not_spawned" : "other";
             string owner = em.Exists(e) && em.HasComponent<Owner>(e) ? $"{OwnerKind(em, em.GetComponentData<Owner>(e).m_Owner)} {em.GetComponentData<Owner>(e).m_Owner.Index}" : "?";
-            Mod.log.Warn($"FAHRZEUG WEG {e.Index} ({owner}): zuletzt {last}, Patient {call.patient.Index}, {how}");
+            Log.Warn($"vehicle vanished ambulance={e.Index} owner={owner} last_state={last} patient={call.patient.Index} reason={how}");
         }
     }
 }

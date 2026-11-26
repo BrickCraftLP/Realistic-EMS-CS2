@@ -1,5 +1,4 @@
 using Colossal.IO.AssetDatabase;
-using Colossal.Logging;
 using Game;
 using Game.Modding;
 using Game.SceneFlow;
@@ -9,11 +8,10 @@ namespace RealisticEMS
 {
     public class Mod : IMod
     {
-        public static ILog log = LogManager.GetLogger(nameof(RealisticEMS)).SetShowsErrorsInUI(false);
         public static Setting Setting;
 
         /// <summary>Shown in the "what's new" screen; keep in sync with ModVersion in Properties/PublishConfiguration.xml and the newest entry in UI/src/mods/news.tsx.</summary>
-        public const string Version = "26.0.2b";
+        public const string Version = "26.0.3b";
 
         /// <summary>German texts when the game runs in German, English otherwise.</summary>
         public static bool German => GameManager.instance?.localizationManager?.activeLocaleId?.StartsWith("de") == true;
@@ -37,6 +35,7 @@ namespace RealisticEMS
             updateSystem.UpdateAfter<StationFleetSystem, HospitalAISystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateAfter<UnitNamingSystem, AmbulanceAISystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateBefore<AmbulanceStuckGuardSystem, AmbulanceAISystem>(SystemUpdatePhase.GameSimulation); // before it deletes stuck ambulances
+            updateSystem.UpdateBefore<AmbulanceKeepOnCallSystem, AmbulanceAISystem>(SystemUpdatePhase.GameSimulation); // before it aborts calls of vehicles vanilla disabled
             updateSystem.UpdateAfter<EmergencyLaneSystem, CarNavigationSystem.Actions>(SystemUpdatePhase.GameSimulation); // after lane object updates
             updateSystem.UpdateBefore<CorridorPreNavSystem, CarNavigationSystem>(SystemUpdatePhase.GameSimulation); // hidden cars stay out of the lane lists
             updateSystem.UpdateAfter<SignalOverrideSystem, TrafficLightSystem>(SystemUpdatePhase.GameSimulation);
@@ -49,6 +48,10 @@ namespace RealisticEMS
             updateSystem.UpdateBefore<HelicopterSystem, AmbulanceAISystem>(SystemUpdatePhase.GameSimulation); // holds handover ambulances before vanilla unloads at the field
             updateSystem.UpdateAfter<ResponderDispatchSystem, PoliceCarAISystem>(SystemUpdatePhase.GameSimulation); // re-sets lights after vanilla ResetPath
             updateSystem.UpdateAfter<CrewHoldSystem, OnSceneCareSystem>(SystemUpdatePhase.GameSimulation);
+            updateSystem.UpdateAfter<FireAlarmSystem, ResponderDispatchSystem>(SystemUpdatePhase.GameSimulation);
+            updateSystem.UpdateAfter<HighwayCrashSystem, ResponderDispatchSystem>(SystemUpdatePhase.GameSimulation);
+            updateSystem.UpdateBefore<FireDamageGuardSystem, FireSimulationSystem>(SystemUpdatePhase.GameSimulation); // building cannot burn down while engines work
+            updateSystem.UpdateBefore<FireSpreadBlockSystem, Game.Events.IgniteSystem>(SystemUpdatePhase.Modification4); // no spread once engines work
             updateSystem.UpdateAfter<PatientKeepSystem, DeathCheckSystem>(SystemUpdatePhase.GameSimulation); // undo vanilla recovery the same frame
             updateSystem.UpdateAfter<SidewalkParkingSystem, OnSceneCareSystem>(SystemUpdatePhase.GameSimulation);
             updateSystem.UpdateBefore<CrewHoldLateSystem, ResidentAISystem>(SystemUpdatePhase.GameSimulation);
@@ -56,13 +59,18 @@ namespace RealisticEMS
             updateSystem.UpdateBefore<CallVolumeSystem, Game.Events.AddHealthProblemSystem>(SystemUpdatePhase.GameSimulation); // sees new health events before they are applied
             updateSystem.UpdateAt<DispatchUISystem>(SystemUpdatePhase.UIUpdate);
             updateSystem.UpdateAt<Map3dProSystem>(SystemUpdatePhase.UIUpdate);
+            // TODO FirePlanSystem.cs does not exist yet: re-enable once it is added (the build failed and nothing was deployed).
+            // updateSystem.UpdateAt<FirePlanSystem>(SystemUpdatePhase.UIUpdate);
             Ampds.Load();
             Ampds.SelfCheck();
             EmergencyLaneSystem.SelfCheck();
             HelicopterSystem.SelfCheck();
+            // FirePlanSystem.SelfCheck(); // TODO see above
             // Must add the prefab before PrefabInitializeSystem runs that frame, else it is never LateInitialized (no toolbar group).
             updateSystem.UpdateBefore<DepotPrefabSystem, Game.Prefabs.PrefabInitializeSystem>(SystemUpdatePhase.PrefabUpdate);
-            log.Info("Loaded");
+            updateSystem.UpdateBefore<AmbulanceStationPrefabSystem, Game.Prefabs.PrefabInitializeSystem>(SystemUpdatePhase.PrefabUpdate);
+            Log.SelfCheck();
+            Log.Info($"loaded version={Version} log_level={Log.MaxLevel}");
         }
 
         public void OnDispose()

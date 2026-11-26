@@ -32,7 +32,7 @@ namespace RealisticEMS
             bool quiet = hold == 0;
             if (quiet == Quiet.Contains(e)) return false;
             if (quiet) Quiet.Add(e); else Quiet.Remove(e);
-            Mod.log.Info($"Einsatzfahrzeug {e.Index}: Sirene {(quiet ? "aus" : "an")}");
+            Log.Trace($"vehicle={e.Index} siren {(quiet ? "off" : "on")}");
             return true;
         }
 
@@ -58,11 +58,19 @@ namespace RealisticEMS
         /// <summary>Unmutes every vehicle not in <paramref name="keep"/> (setting off, lights off, gone). Adds them to <paramref name="changed"/>.</summary>
         private void ReleaseSirens(HashSet<Entity> keep, List<Entity> changed)
         {
-            foreach (var e in new List<Entity>(Quiet))
-                if (keep == null || !keep.Contains(e)) { Quiet.Remove(e); m_SirenHold.Remove(e); changed.Add(e); }
-            if (keep == null) m_SirenHold.Clear();
-            else foreach (var e in new List<Entity>(m_SirenHold.Keys)) if (!keep.Contains(e)) m_SirenHold.Remove(e);
+            Quiet.RemoveWhere(e =>
+            {
+                if (keep != null && keep.Contains(e)) return false;
+                m_SirenHold.Remove(e); changed.Add(e);
+                return true;
+            });
+            if (keep == null) { m_SirenHold.Clear(); return; }
+            m_SirenKeys.Clear();
+            foreach (var e in m_SirenHold.Keys) if (!keep.Contains(e)) m_SirenKeys.Add(e);
+            foreach (var e in m_SirenKeys) m_SirenHold.Remove(e);
         }
+
+        private readonly List<Entity> m_SirenKeys = new List<Entity>();
 
         /// <summary>EffectsUpdated makes vanilla re-check the vehicle's effects (siren on/off). After all chunk copies: structural change.</summary>
         private void RefreshEffects(List<Entity> changed)

@@ -22,7 +22,7 @@ namespace RealisticEMS
 {
     /// <summary>
     /// During on-scene care, ambulances and NEFs leave the lane free. All vehicles of one call location form a group:
-    /// the first on scene parks by priority (see Park): parking lane, sidewalk without parking lane, kerb lane of a
+    /// ambulances, the doctor and one police car first take the building's own lot (ParkOnLot); of the rest, the first on scene parks by priority (see Park): parking lane, sidewalk without parking lane, kerb lane of a
     /// multi-lane road, intersection corner, else on the road. The others line up behind it. Other cars only see an obstacle through the lane's LaneObject
     /// buffer, so the vehicle is taken out of it; when care ends it is put back on the lane (and into the buffer) before
     /// the patient boards.
@@ -64,7 +64,7 @@ namespace RealisticEMS
         protected override void OnGamePreload(Colossal.Serialization.Entities.Purpose purpose, GameMode mode)
         {
             base.OnGamePreload(purpose, mode);
-            OnRoad.Clear(); m_Parked.Clear(); m_Spots.Clear(); m_Anchors.Clear(); m_Leader.Clear(); m_ParkLane.Clear(); m_Joined.Clear();
+            OnRoad.Clear(); m_LotSlot.Clear(); m_Parked.Clear(); m_Spots.Clear(); m_Anchors.Clear(); m_Leader.Clear(); m_ParkLane.Clear(); m_Joined.Clear();
         }
 
         /// <summary>Vehicles standing in a car lane on scene; EmergencyLaneSystem moves the cars behind them to another lane.</summary>
@@ -75,6 +75,7 @@ namespace RealisticEMS
         protected override void OnUpdate()
         {
             PurgeParkLanes();
+            Cordon.Purge(EntityManager);
             if ((++m_Tick & 15) != 0) return; // the rest every 16 frames, as before
             var em = EntityManager;
             bool parking = Mod.Setting.ParkOnSidewalk;
@@ -90,7 +91,7 @@ namespace RealisticEMS
             Entity CallOf(Entity v) => em.Exists(v) && em.HasComponent<Ambulance>(v) ? em.GetComponentData<Ambulance>(v).m_TargetLocation : Entity.Null;
             foreach (var rtw in CrewHoldSystem.Held) Add(rtw, CallOf(rtw));
             foreach (var nef in NefDispatchSystem.NefByPatient.Values) if (nef != Entity.Null) Add(nef, CallOf(nef));
-            foreach (var kv in ResponderDispatchSystem.HeldAt) Add(kv.Key, kv.Value);
+            foreach (var kv in ResponderDispatchSystem.HeldAt) if (!Cordon.IsCordon(kv.Key)) Add(kv.Key, kv.Value);
             m_Groups = groups;
             foreach (var kv in groups) foreach (var v in kv.Value) ArriveIfQueued(v, kv.Key);
 
@@ -100,10 +101,15 @@ namespace RealisticEMS
                 if (!groups.TryGetValue(location, out var g) || !g.Contains(m_Leader[location])) m_Leader.Remove(location);
 
             var followers = new HashSet<Entity>();
+            m_LotSlot.Keys.Where(v => !members.Contains(v)).ToList().ForEach(v => m_LotSlot.Remove(v));
             foreach (var kv in groups)
             {
-                var group = kv.Value;
-                if (!m_Leader.TryGetValue(kv.Key, out var leader))
+                // Fire standby (ambulances/NEFs at the staging address): one row at the kerb, never on the lot.
+                bool standby = kv.Value.TrueForAll(ResponderDispatchSystem.Standby.Contains);
+                // Lot first (ambulances, doctor, one police car); everyone else parks by the road as before.
+                var group = parking && !standby ? ParkOnLot(kv.Key, kv.Value) : kv.Value;
+                if (m_Leader.TryGetValue(kv.Key, out var leader) && !group.Contains(leader)) m_Leader.Remove(kv.Key);
+                if (!m_Leader.TryGetValue(kv.Key, out leader))
                 {
                     leader = group.Find(Ready);
                     if (leader == Entity.Null) continue;
@@ -122,7 +128,11 @@ namespace RealisticEMS
                     {
                         // Vanilla routes each vehicle to its own end of the address: line up behind the leader on the road.
                         JoinGroup(f, leader, (Length(leader) + Length(f)) * 0.5f + queued);
-                        if (parking && !(m_Anchors.TryGetValue(leader, out var anchor) && ParkBehind(f, leader, anchor))) Park(f, 0f, Entity.Null);
+                        if (parking && !(m_Anchors.TryGetValue(leader, out var anchor) && ParkBehind(f, leader, anchor)))
+                        {
+                            if (!standby) Park(f, 0f, Entity.Null);
+                            else { m_Parked[f] = EntityManager.GetComponentData<Transform>(f); m_Spots[f] = (float3.zero, 0f); OnRoad.Add(f); } // stays in the row on the road
+                        }
                         settled = true;
                     }
                     if (settled) queued += Length(f);
@@ -130,6 +140,54 @@ namespace RealisticEMS
             }
             m_Joined.IntersectWith(followers);
             KeepOffLanes();
+        }
+
+        private readonly Dictionary<Entity, int> m_LotSlot = new Dictionary<Entity, int>(); // vehicle parked on the call's building lot -> slot
+
+        /// <summary>
+        /// Parks the call's ambulances, then the doctor, then one police car on the building's own lot, one behind the
+        /// other along its longest drivable lane. Returns the vehicles left for the roadside.
+        /// ponytail: capacity = lane length / vehicle length on one lot lane; lots with several rows only use the longest.
+        /// </summary>
+        private List<Entity> ParkOnLot(Entity location, List<Entity> group)
+        {
+            var em = EntityManager;
+            if (!Mod.Setting.ParkOnSidewalk || !em.HasComponent<Game.Buildings.Building>(location) || !em.HasBuffer<SubLane>(location)) return group;
+            Bezier4x3 lot = default; float lotLength = 0f;
+            foreach (var sub in em.GetBuffer<SubLane>(location, true))
+            {
+                var l = sub.m_SubLane;
+                if (!(em.HasComponent<Game.Net.CarLane>(l) || em.HasComponent<Game.Net.ParkingLane>(l)) || !em.HasComponent<Curve>(l)) continue;
+                var c = em.GetComponentData<Curve>(l);
+                if (c.m_Length > lotLength) { lotLength = c.m_Length; lot = c.m_Bezier; }
+            }
+            if (lotLength < 6f) return group; // no lot (most homes)
+
+            int Rank(Entity v) => !em.HasComponent<Ambulance>(v) ? 2 : NefDispatchSystem.IsNef(em, v) ? 1 : 0;
+            var candidates = group.Where(v => !em.HasComponent<Game.Vehicles.Helicopter>(v) && (em.HasComponent<Ambulance>(v) || em.HasComponent<Game.Vehicles.PoliceCar>(v)))
+                .OrderBy(Rank).ThenBy(v => v.Index).ToList();
+            var police = candidates.FirstOrDefault(v => Rank(v) == 2);
+            candidates.RemoveAll(v => Rank(v) == 2 && v != police); // one police car at most
+
+            var onLot = new HashSet<Entity>();
+            float used = 1f; // metres of the lane taken, from its start
+            foreach (var v in candidates)
+            {
+                float len = Length(v);
+                if (used + len > lotLength) break; // full: the rest park by the road
+                onLot.Add(v);
+                float at = used + len * 0.5f;
+                used += len;
+                if (m_LotSlot.ContainsKey(v) || !Ready(v)) continue;
+                if (m_Parked.ContainsKey(v)) Restore(v); // was parked by the road before the lot was free
+                float t = math.saturate(at / lotLength);
+                float3 pos = MathUtils.Position(lot, t), dir = MathUtils.Tangent(lot, t); dir.y = 0f;
+                if (math.distance(em.GetComponentData<Transform>(v).m_Position.xz, pos.xz) > MaxJump * 2f) { onLot.Remove(v); continue; } // lot of a big site, far from where it stopped
+                Place(v, pos, quaternion.LookRotationSafe(math.normalizesafe(dir, new float3(0, 0, 1)), math.up()), len);
+                m_LotSlot[v] = onLot.Count;
+                Log.Debug($"unit={m_Units.CallsignOf(v)} parking on the property, slot {onLot.Count}");
+            }
+            return group.Where(v => !onLot.Contains(v)).ToList();
         }
 
         private EntityQuery m_Blocked;
@@ -162,7 +220,7 @@ namespace RealisticEMS
                 if ((cl.m_LaneFlags & CarLaneFlags.IgnoreBlocker) != 0) continue;
                 cl.m_LaneFlags |= CarLaneFlags.IgnoreBlocker;
                 em.SetComponentData(cars[i], cl);
-                Mod.log.Info($"#{cars[i].Index} wartete auf {m_Units.CallsignOf(blockers[i].m_Blocker)} (steht neben der Fahrbahn), fährt weiter");
+                Log.Debug($"car={cars[i].Index} released, blocker unit={m_Units.CallsignOf(blockers[i].m_Blocker)} is parked off road");
             }
         }
 
@@ -195,20 +253,34 @@ namespace RealisticEMS
                 if (math.distance(road.xz, pos.xz) < Length(v) + 6f) { queued = true; break; }
             }
             if (!queued) return;
+            EndPathHere(v);
+            Log.Debug($"unit={m_Units.CallsignOf(v)} behind scene group, counts as arrived");
+        }
 
+        /// <summary>The vehicle's path ends where it stands: vanilla then stops it as arrived. Also used for fire engines
+        /// stuck behind others near their fire (FireAlarmSystem).</summary>
+        public void EndPathHere(Entity v)
+        {
+            var em = EntityManager;
+            var lane = em.GetComponentData<CarCurrentLane>(v);
+            var po = em.GetComponentData<PathOwner>(v);
             lane.m_LaneFlags = (lane.m_LaneFlags | CarLaneFlags.EndOfPath | CarLaneFlags.EndReached) & ~(CarLaneFlags.ParkingSpace | CarLaneFlags.Waypoint);
             lane.m_CurvePosition = new float3(lane.m_CurvePosition.x); // stop here
             em.SetComponentData(v, lane);
             if (em.HasBuffer<CarNavigationLane>(v)) em.GetBuffer<CarNavigationLane>(v).Clear();
             if (em.HasBuffer<PathElement>(v)) { po.m_ElementIndex = em.GetBuffer<PathElement>(v).Length; em.SetComponentData(v, po); }
-            Mod.log.Info($"{m_Units.CallsignOf(v)} steht hinter der Gruppe, gilt als angekommen");
         }
+
+        /// <summary>Fire engines at a fire (FireAlarmSystem): <paramref name="follower"/> stands <paramref name="gap"/> m behind <paramref name="leader"/>.</summary>
+        public void LineUpBehind(Entity follower, Entity leader, float gap) => JoinGroup(follower, leader, gap, anyDistance: true);
+        public float VehicleLength(Entity e) => Length(e);
 
         /// <summary>
         /// Moves a stopped follower onto the leader's lane, <paramref name="gap"/> metres behind the leader's road position
         /// (also when the leader itself is parked aside). The lane is taken over too, so the follower departs from there.
         /// </summary>
-        private void JoinGroup(Entity follower, Entity leader, float gap)
+        /// <param name="anyDistance">Fire engines (held by FireAlarmSystem): joins the row even from another segment far away.</param>
+        private void JoinGroup(Entity follower, Entity leader, float gap, bool anyDistance = false)
         {
             var em = EntityManager;
             if (!m_Joined.Add(follower)) return;
@@ -217,7 +289,7 @@ namespace RealisticEMS
             if (math.distance(em.GetComponentData<Transform>(follower).m_Position.xz, queuePos.xz) < 4f) return; // already in place
             var rl = em.GetComponentData<CarCurrentLane>(leader);
             // Same road segment: drive-in distance, fine. Elsewhere (other path end of the address) it stays put.
-            if (TooFar(follower, queuePos) && Edge(em.GetComponentData<CarCurrentLane>(follower).m_Lane) != Edge(rl.m_Lane)) return;
+            if (!anyDistance && TooFar(follower, queuePos) && Edge(em.GetComponentData<CarCurrentLane>(follower).m_Lane) != Edge(rl.m_Lane)) return;
             if (!em.HasComponent<Curve>(rl.m_Lane) || !em.HasBuffer<LaneObject>(rl.m_Lane)) return;
 
             float laneLength = math.max(1f, em.GetComponentData<Curve>(rl.m_Lane).m_Length);
@@ -236,7 +308,8 @@ namespace RealisticEMS
 
             em.SetComponentData(follower, new Transform(queuePos, road.m_Rotation));
             if (!em.HasComponent<Updated>(follower)) em.AddComponent<Updated>(follower);
-            Mod.log.Info($"{m_Units.CallsignOf(follower)} stellt sich hinter {m_Units.CallsignOf(leader)}");
+            var line = $"unit={m_Units.CallsignOf(follower)} lining up behind={m_Units.CallsignOf(leader)} gap={gap:0}m";
+            if (anyDistance) Log.Info(line); else Log.Debug(line);
         }
 
         private readonly Dictionary<Entity, CornerSpot> m_Anchors = new Dictionary<Entity, CornerSpot>(); // parked vehicle -> where it stands
@@ -272,7 +345,10 @@ namespace RealisticEMS
             var t = em.GetComponentData<Transform>(e);
             if (EmergencyLaneSystem.IsPedestrianStreet(em, lane.m_Lane))
             {
-                Mod.log.Info($"{m_Units.CallsignOf(e)}: Fußgängerzone, bleibt stehen");
+                // Edge of the walkway if there is room, else where it stands.
+                if (TryFindSidewalk(lane.m_Lane, t.m_Position, true, out var psw, out var pst, out var pRoad)
+                    && ParkOnSidewalk(e, Edge(lane.m_Lane), psw, pst, pRoad, t.m_Rotation, "am Rand der Fußgängerzone")) return;
+                Log.Debug($"unit={m_Units.CallsignOf(e)} pedestrian zone, staying put");
                 m_Parked[e] = t; m_Spots[e] = (float3.zero, 0f); // whole street is walkway: stop where it is
                 return;
             }
@@ -291,14 +367,14 @@ namespace RealisticEMS
             Bezier4x3 sidewalk; float st; float3 toRoad;
             if (KerbLaneOfMultiLane(lane.m_Lane, edge))
             {
-                Mod.log.Info($"{m_Units.CallsignOf(e)} bleibt auf der rechten Spur, Verkehr fährt vorbei");
+                Log.Debug($"unit={m_Units.CallsignOf(e)} staying in right lane, traffic passes");
                 m_Parked[e] = t; m_Spots[e] = (float3.zero, 0f); OnRoad.Add(e); // stays in the lane buffer: others change lanes
                 return;
             }
             if (TryParkAtCorner(e, groupLength, location, false)) return;
             foreach (var at in spots)
                 if (TryFindSidewalk(lane.m_Lane, at, true, out sidewalk, out st, out toRoad) && ParkOnSidewalk(e, edge, sidewalk, st, toRoad, t.m_Rotation, "auf Gehsteig hinter Parkspur")) return;
-            Mod.log.Info($"{m_Units.CallsignOf(e)}: kein freier Platz neben der Fahrbahn, bleibt auf der Fahrbahn");
+            Log.Debug($"unit={m_Units.CallsignOf(e)} no free spot off road, staying on road");
             m_Parked[e] = t; m_Spots[e] = (float3.zero, 0f); OnRoad.Add(e); // decided: stays on the road
         }
 
@@ -308,7 +384,7 @@ namespace RealisticEMS
             if (!TryFreeSpot(edge, sidewalk, st, VehicleWidth(e), length, out float3 spot, out float spotT)) return false;
             Place(e, spot, rotation, length);
             m_Anchors[e] = new CornerSpot { Pos = spot, Rot = rotation, Curve = sidewalk, LaneT = spotT, ToRoad = toRoad, Forward = math.forward(rotation), Edge = edge };
-            Mod.log.Info($"{m_Units.CallsignOf(e)} parkt {where}");
+            Log.Debug($"unit={m_Units.CallsignOf(e)} parking {where}");
             return true;
         }
 
@@ -338,7 +414,7 @@ namespace RealisticEMS
                     if (!OffRoad(anchor.Edge, MathUtils.Position(anchor.Curve, ct), VehicleWidth(e), out float3 pos) || !SpotFree(pos, length) || TooFar(e, pos)) continue;
                     Place(e, pos, anchor.Rot, length);
                     m_Anchors[e] = new CornerSpot { Pos = pos, Rot = anchor.Rot, Curve = anchor.Curve, LaneT = ct, ToRoad = anchor.ToRoad, Forward = anchor.Forward, Edge = anchor.Edge };
-                    Mod.log.Info($"{m_Units.CallsignOf(e)} parkt auf Gehsteig {where} {m_Units.CallsignOf(leader)}");
+                    Log.Debug($"unit={m_Units.CallsignOf(e)} parking on sidewalk {where} {m_Units.CallsignOf(leader)}");
                     return true;
                 }
             }
@@ -350,7 +426,7 @@ namespace RealisticEMS
             var em = EntityManager;
             var t = m_Parked[e];
             bool moved = m_Spots.TryGetValue(e, out var s) && s.length > 0f;
-            m_Parked.Remove(e); m_Spots.Remove(e); m_Anchors.Remove(e); OnRoad.Remove(e);
+            m_Parked.Remove(e); m_Spots.Remove(e); m_Anchors.Remove(e); OnRoad.Remove(e); m_LotSlot.Remove(e);
             if (m_ParkLane.TryGetValue(e, out var parkLane))
             {
                 m_ParkLane.Remove(e);
@@ -369,7 +445,7 @@ namespace RealisticEMS
                 NetUtils.RemoveLaneObject(buffer, e); // no duplicates
                 NetUtils.AddLaneObject(buffer, e, lane.m_CurvePosition.xy);
             }
-            Mod.log.Info($"{m_Units.CallsignOf(e)} fährt vom Gehsteig zurück auf die Fahrbahn");
+            Log.Debug($"unit={m_Units.CallsignOf(e)} leaving sidewalk, back on road");
         }
 
         /// <summary>
@@ -737,8 +813,8 @@ namespace RealisticEMS
                 NetUtils.AddLaneObject(em.GetBuffer<LaneObject>(spot.ParkingLane), e, new float2(math.saturate(spot.LaneT - half), math.saturate(spot.LaneT + half)));
                 m_ParkLane[e] = spot.ParkingLane;
             }
-            string where = spot.ParkingLane == Entity.Null ? "auf Gehsteig/Grünstreifen" : spot.Angled ? "schräg mit der Nase auf dem Gehsteig" : "in der Parkspur";
-            Mod.log.Info($"{m_Units.CallsignOf(e)} parkt {(node != Entity.Null ? "an der Kreuzung " : "")}{where}{behind}");
+            string where = spot.ParkingLane == Entity.Null ? "on sidewalk/verge" : spot.Angled ? "angled, nose on sidewalk" : "in parking lane";
+            Log.Debug($"unit={m_Units.CallsignOf(e)} parking {(node != Entity.Null ? "at junction " : "")}{where}{behind}");
         }
 
         /// <summary>Moves a stopped vehicle off its lane to <paramref name="pos"/>; other cars no longer see it as obstacle.</summary>

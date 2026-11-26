@@ -22,6 +22,11 @@ Calls and crews
 - Call mix: Realistic, Balanced or Dramatic severity.
 - Emergency doctor cars (NEF) from hospitals (experimental).
 - Police and fire brigade are sent along for matching codes.
+- Fire alarm levels: more engines and police by building and street, next alarm if it still burns. The street is closed to through traffic.
+- Highway crashes from rear-end to pileup, with closed lanes, police and road maintenance.
+- Small Ambulance Stations, ambulances with a doctor (NAW), NEFs at fire stations.
+- Rescue helicopter (experimental).
+- Units are only sent where they can reach by road.
 
 On scene
 - On-scene care time: the crew stays with the patient before transport. Driving time does not count.
@@ -48,9 +53,25 @@ AI disclosure: the logo, layout and illustrations of the preview images were des
 	<Screenshot Value="Properties/Screenshot7.jpg" />
 	<Tag Value="Code Mod" />
 	<ForumLink Value="" />
-	<ModVersion Value="26.0.2b" />
+	<ModVersion Value="26.0.3b" />
 	<GameVersion Value="1.*" />
 	<ChangeLog>
+26.0.3b
+New
+- Fire alarm levels: more engines and police, scaled by building and street. Still burning after a while? Next alarm. Police hold the scene as long as it burns.
+- Street closed at fires: through traffic detours, responders still get in.
+- Highway crashes: from rear-end to pileup, with closed lanes, police and road maintenance trucks.
+- Rescue helicopter (experimental, off by default): doctor and patient flights. Lands on sports fields, police drive the doctor. Island clinics fly out critical patients.
+- Ambulance Station: a small base for one unit, listed with the clinic.
+- Station options: ambulances with a doctor (NAW), a NEF at the fire station, and the fire brigade livery for their ambulances.
+- Road reach: no units are sent to places they cannot reach by road (e.g. across the water).
+- The building panel shows your bed slider.
+
+Fixed
+- NEFs and helicopters no longer pull ambulances off a call (lost calls).
+- Highway Rettungsgasse is wider and steadier.
+- Smoother frame rates in big cities.
+
 26.0.2b
 New
 - Rettungsgasse reworked: on highways every traffic jam forms the corridor, on other multi-lane roads as soon as an emergency vehicle comes. Left lane goes left, all others right, trucks included. Ramps stay clear near exits and entries. Several emergency vehicles in a row pass together.

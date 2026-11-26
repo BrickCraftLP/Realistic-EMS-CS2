@@ -21,7 +21,12 @@ namespace RealisticEMS
     public partial class VehicleStateSection : VehiclesSection
     {
         private const BindingFlags Private = BindingFlags.NonPublic | BindingFlags.Instance;
-        private static T Get<T>(object o, string prop) => (T)typeof(VehiclesSection).GetProperty(prop, Private).GetValue(o);
+        private static readonly Dictionary<string, PropertyInfo> s_Props = new Dictionary<string, PropertyInfo>();
+        private static T Get<T>(object o, string prop)
+        {
+            if (!s_Props.TryGetValue(prop, out var p)) s_Props[prop] = p = typeof(VehiclesSection).GetProperty(prop, Private);
+            return (T)p.GetValue(o);
+        }
 
         /// <summary>Swaps the vanilla section for this one. Call once after SelectedInfoUISystem exists.</summary>
         public static void Install(World world)
@@ -32,12 +37,12 @@ namespace RealisticEMS
                 var sections = (List<ISectionSource>)typeof(SelectedInfoUISystem).GetField("m_MiddleSections", Private).GetValue(info);
                 int i = sections.FindIndex(s => s?.GetType() == typeof(VehiclesSection));
                 if (i >= 0) sections[i] = world.GetOrCreateSystemManaged<VehicleStateSection>();
-                else Mod.log.Warn("VehiclesSection not found, building panel shows vanilla vehicle states");
+                else Log.Warn("VehiclesSection not found, building panel shows vanilla vehicle states");
                 CallInfoSection.Install(world, sections);
                 StationCallsignSection.Install(world, sections);
                 BedDisplaySection.Install(world);
             }
-            catch (Exception ex) { Mod.log.Error(ex, "VehicleStateSection.Install failed"); }
+            catch (Exception ex) { Log.Error(ex, "VehicleStateSection.Install failed"); }
         }
 
         // Saves from before AmbulanceReturnSystem.SetOwner can hold destroyed vehicles in a depot's buffer; vanilla's

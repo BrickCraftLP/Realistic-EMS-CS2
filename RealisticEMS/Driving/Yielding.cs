@@ -86,7 +86,7 @@ namespace RealisticEMS
                             if (kerbLine < -lw * 0.5f - 0.01f || kerbLine > shift[0] - V * 0.5f + 0.01f) throw new Exception($"Rettungsgasse: fire engine line outside: {kat}");
                         }
                     }
-            Mod.log.Info("Rettungsgasse self-check ok");
+            Log.Debug("corridor self-check ok");
         }
 
         // ---- Cars stopped for an emergency vehicle ----

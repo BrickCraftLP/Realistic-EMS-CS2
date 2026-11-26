@@ -5,7 +5,9 @@
   <PropertyGroup>
     <AssemblyName>RealisticEMS</AssemblyName>
     <RootNamespace>RealisticEMS</RootNamespace>
-    <Version>26.0.2</Version>
+    <!-- 10: interpolated-string handlers make disabled log calls free (Log.cs). Still net48 IL. -->
+    <LangVersion>10.0</LangVersion>
+    <Version>26.0.3</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -42,5 +44,7 @@
   <Target Name="BuildUI" AfterTargets="DeployWIP">
     <Exec Command="npm install --no-audit --no-fund" WorkingDirectory="UI" Condition="!Exists('UI\node_modules')" />
     <Exec Command="npm run build" WorkingDirectory="UI" EnvironmentVariables="CSII_USERDATAPATH=$(UserDataPath)" />
+    <!-- Remove debug files from mod deployment to reduce size (~186 KB). -->
+    <Delete Files="$(UserDataPath)\Mods\RealisticEMS\*.pdb" />
   </Target>
 </Project>

@@ -34,6 +34,15 @@ namespace RealisticEMS
         public void Deserialize<TReader>(TReader reader) where TReader : IReader => reader.Read(out m_Packed);
     }
 
+    /// <summary>Separate callsign for the ambulances of a fire station (same packing). Own component so old saves stay valid.</summary>
+    public struct AmbulanceCallsign : IComponentData, ISerializable
+    {
+        public uint m_Packed;
+        public override string ToString() => new StationCallsign { m_Packed = m_Packed }.ToString();
+        public void Serialize<TWriter>(TWriter writer) where TWriter : IWriter => writer.Write(m_Packed);
+        public void Deserialize<TReader>(TReader reader) where TReader : IReader => reader.Read(out m_Packed);
+    }
+
     /// <summary>
     /// Building-panel section for hospitals, ambulance depots, police and fire stations: edit the station callsign.
     /// Vehicles of the station are then named "RTW {callsign}-01" etc. Empty input clears it (back to the number).
@@ -44,15 +53,20 @@ namespace RealisticEMS
     public partial class StationCallsignSection : InfoSectionBase
     {
         protected override string group => nameof(StationCallsignSection);
-        private string m_Callsign = "";
+        private string m_Callsign = "", m_AmbCallsign = "";
         private int m_Slots, m_Ambulances; // m_Slots 0 = no slider
-        private bool m_Fire, m_Livery;
+        private bool m_Fire, m_Livery, m_NawOk;
+        private int m_Naw;
 
         public static void Install(World world, List<ISectionSource> sections) =>
             sections.Insert(0, world.GetOrCreateSystemManaged<StationCallsignSection>());
 
         public static bool IsStation(EntityManager em, Entity e) =>
             em.HasComponent<Game.Buildings.Hospital>(e) || em.HasComponent<Game.Buildings.PoliceStation>(e) || em.HasComponent<Game.Buildings.FireStation>(e);
+
+        /// <summary>Ambulance callsign of a fire station, else the station callsign, else null.</summary>
+        public static string AmbulanceOf(EntityManager em, Entity station) =>
+            em.TryGetComponent<AmbulanceCallsign>(station, out var c) ? c.ToString() : Of(em, station);
 
         /// <summary>The station's callsign, or null if none set.</summary>
         public static string Of(EntityManager em, Entity station) =>
@@ -62,8 +76,10 @@ namespace RealisticEMS
         {
             base.OnCreate();
             AddBinding(new TriggerBinding<string>(group, "set", Set));
+            AddBinding(new TriggerBinding<string>(group, "setAmb", SetAmb));
             AddBinding(new TriggerBinding<int>(group, "setAmbulances", SetAmbulances));
             AddBinding(new TriggerBinding<bool>(group, "setLivery", SetLivery));
+            AddBinding(new TriggerBinding<int>(group, "setNaw", SetNaw));
             AddBinding(new TriggerBinding<int>(group, "setBeds", v => SetCap(v, BedMax, 0)));
             AddBinding(new TriggerBinding<int>(group, "setNef", v => SetCap(v, NefMax, 1)));
             AddBinding(new TriggerBinding<int>(group, "setCars", v => SetCap(v, CarMax, 2)));
@@ -81,7 +97,7 @@ namespace RealisticEMS
             if (!DispatchUISystem.DebugUnlocked || !EntityManager.Exists(e) || !IsHospital(e)) return;
             m_HeliStatus = World.GetOrCreateSystemManaged<HelicopterSystem>().DebugCriticalTransfer(e);
             m_HeliStatusFor = e;
-            Mod.log.Info($"Debug RTH Spital {e.Index}: {m_HeliStatus}");
+            Log.Info($"debug: heli test hospital={e.Index}: {m_HeliStatus}");
             RequestUpdate();
         }
 
@@ -119,6 +135,20 @@ namespace RealisticEMS
             return v >= 0 ? math.min(v, max) : field == 0 ? math.min(StationFleetSystem.BedSlots(EntityManager, e), max) : field == 1 ? math.min(Mod.Setting.NefPerHospital, max) : max;
         }
 
+        /// <summary>NAW mode for the ambulance station / fire stations (1), NEF for fire stations (2), 0 = off. German only.</summary>
+        private bool CanNaw(Entity e) => Mod.German && EntityManager.Exists(e)
+            && (EntityManager.HasComponent<Game.Buildings.FireStation>(e) ? Mod.Setting.FireStationAmbulances : Slots(e) == 1);
+
+        private void SetNaw(int mode)
+        {
+            var e = selectedEntity;
+            if (!CanNaw(e)) return;
+            if (mode == 2 && !(EntityManager.HasComponent<Game.Buildings.FireStation>(e) && Mod.Setting.EnableNef)) mode = 0;
+            if (mode == 1 || mode == 2) EntityManager.AddComponentData(e, new StationNaw { m_Mode = (byte)mode });
+            else EntityManager.RemoveComponent<StationNaw>(e);
+            RequestUpdate();
+        }
+
         private void SetLivery(bool on)
         {
             var e = selectedEntity;
@@ -148,18 +178,31 @@ namespace RealisticEMS
             RequestUpdate();
         }
 
+        private void SetAmb(string value)
+        {
+            var e = selectedEntity;
+            if (!EntityManager.Exists(e) || !EntityManager.HasComponent<Game.Buildings.FireStation>(e)) return;
+            if (string.IsNullOrWhiteSpace(value)) { if (EntityManager.HasComponent<AmbulanceCallsign>(e)) EntityManager.RemoveComponent<AmbulanceCallsign>(e); }
+            else if (StationCallsign.TryPack(value, out var packed)) EntityManager.AddComponentData(e, new AmbulanceCallsign { m_Packed = packed });
+            else return;
+            UnitNamingSystem.RenameStation(e);
+            RequestUpdate();
+        }
+
         private int m_BedMax, m_Beds, m_NefMax, m_Nef, m_CarMax, m_Cars;
 
-        protected override void Reset() { m_Callsign = ""; m_Slots = m_Ambulances = m_BedMax = m_Beds = m_NefMax = m_Nef = m_CarMax = m_Cars = 0; m_Fire = m_Livery = false; }
+        protected override void Reset() { m_Callsign = m_AmbCallsign = ""; m_Slots = m_Ambulances = m_BedMax = m_Beds = m_NefMax = m_Nef = m_CarMax = m_Cars = 0; m_Fire = m_Livery = false; }
 
         protected override void OnUpdate()
         {
             visible = IsStation(EntityManager, selectedEntity);
             if (!visible) return;
             m_Callsign = Of(EntityManager, selectedEntity) ?? "";
+            m_AmbCallsign = EntityManager.TryGetComponent<AmbulanceCallsign>(selectedEntity, out var ac) ? ac.ToString() : "";
             m_Slots = Slots(selectedEntity);
             m_Fire = EntityManager.HasComponent<Game.Buildings.FireStation>(selectedEntity);
             m_Livery = EntityManager.HasComponent<FireLivery>(selectedEntity);
+            m_NawOk = CanNaw(selectedEntity); m_Naw = StationFleetSystem.Mode(EntityManager, selectedEntity);
             m_Ambulances = m_Slots > 0 ? StationFleetSystem.Ambulances(EntityManager, selectedEntity, m_Slots) : 0;
             var e = selectedEntity;
             m_BedMax = BedMax(e); m_Beds = Cap(e, m_BedMax, 0);
@@ -174,10 +217,14 @@ namespace RealisticEMS
         public override void OnWriteProperties(IJsonWriter w)
         {
             w.PropertyName("callsign"); w.Write(m_Callsign);
+            w.PropertyName("ambCallsign"); w.Write(m_AmbCallsign);
             w.PropertyName("slots"); w.Write(m_Slots);
             w.PropertyName("ambulances"); w.Write(m_Ambulances);
             w.PropertyName("fire"); w.Write(m_Fire);
             w.PropertyName("livery"); w.Write(m_Livery);
+            w.PropertyName("nawOk"); w.Write(m_NawOk);
+            w.PropertyName("naw"); w.Write(m_Naw);
+            w.PropertyName("nefOk"); w.Write(m_Fire && Mod.Setting.EnableNef);
             w.PropertyName("bedMax"); w.Write(m_BedMax);
             w.PropertyName("beds"); w.Write(m_Beds);
             w.PropertyName("nefMax"); w.Write(m_NefMax);
