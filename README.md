@@ -1,4 +1,4 @@
-<img width="1920" height="1080" alt="overview" src="https://github.com/user-attachments/assets/f7e6cca4-920e-4196-bbc1-04334ede05b6" />
+<img width="1920" height="1080" alt="overview-26 0 3b" src="https://github.com/user-attachments/assets/df9b3b6a-d649-464f-9d68-485e0c71a69e" />
 
 # Realistic EMS (Beta)
 
@@ -67,9 +67,10 @@ Settings live in [Setting.cs](RealisticEMS/Setting.cs). German and English are i
 - Subscribe on Paradox Mods (mod ID `166759`).
 - Requires Cities: Skylines II, game version `1.*`.
 
-## Building
+## Last Updates:
+<img width="1920" height="1080" alt="overview" src="https://github.com/user-attachments/assets/f7e6cca4-920e-4196-bbc1-04334ede05b6" />
+<img width="1920" height="1080" alt="Screenshot0" src="https://github.com/user-attachments/assets/bcd74dbe-ba4c-4c58-a71a-d60f46ede4ba" />
 
-Requires the CS2 modding toolchain (.NET Framework 4.8 target) and Node for the UI in `RealisticEMS/UI`.
 
 ```
 dotnet build RealisticEMS/RealisticEMS.csproj -c Release
